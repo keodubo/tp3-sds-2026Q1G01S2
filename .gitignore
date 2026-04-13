@@ -1,2 +1,6 @@
 .DS_Store
 **/.DS_Store
+.pytest_cache/
+__pycache__/
+*.egg-info/
+artifacts/

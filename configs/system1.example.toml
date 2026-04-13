@@ -1,0 +1,21 @@
+[simulation]
+duration = 5.0
+seed = 42
+max_events = 20000
+
+[geometry]
+diameter = 80.0
+obstacle_radius = 1.0
+particle_radius = 1.0
+
+[particles]
+count = 12
+mass = 1.0
+speed = 1.0
+
+[output]
+path = "../artifacts/system1/example_run.txt"
+snapshot_every = 1
+
+[observables]
+radial_bin_width = 0.2
