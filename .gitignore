@@ -1,6 +1,27 @@
 .DS_Store
 **/.DS_Store
-.pytest_cache/
+
+# Python caches and local environments
 __pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Packaging outputs
 *.egg-info/
+build/
+dist/
+
+# Generated project artifacts
 artifacts/
+
+# Local editor / vault state that is not part of the repo deliverable
+.idea/
+.vscode/
+docs/SDS/

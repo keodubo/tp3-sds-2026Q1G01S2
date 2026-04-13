@@ -146,3 +146,15 @@ def test_search_uses_index_then_rg_fallback(tmp_path: Path) -> None:
     fallback_results = search_wiki(tmp_path, "omega-signal")
     assert fallback_results
     assert fallback_results[0].source.startswith("rg:")
+
+
+def test_tp3_source_page_is_detailed_in_repo() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    page = load_page(repo_root / "docs" / "wiki" / "source_tp3_enunciado.md")
+
+    assert "## System 1: Required Study 1.1" in page.body
+    assert "## System 1: Required Study 1.2" in page.body
+    assert "## System 1: Required Study 1.3" in page.body
+    assert "## System 1: Required Study 1.4" in page.body
+    assert "## Global Deliverables and Constraints" in page.body
+    assert "zip must be smaller than `100 KB`" in page.body

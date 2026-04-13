@@ -1,0 +1,37 @@
+[geometry]
+diameter = 80.0
+obstacle_radius = 1.0
+particle_radius = 1.0
+
+[particles]
+count = 8
+mass = 1.0
+speed = 1.0
+
+[observables]
+radial_bin_width = 0.2
+
+[study]
+study_id = "example-study"
+counts_mode = "explicit"
+counts = [8, 12]
+auto_counts = [8, 16, 24, 32, 48, 64]
+repetitions = 2
+seed_start = 100
+runtime_duration = 5.0
+runtime_limit_seconds = 20.0
+snapshot_every = 5
+generate_figures = true
+artifacts_root = "../artifacts/system1/studies"
+max_events = 500000
+fresh_color = [0, 255, 0]
+used_color = [148, 0, 211]
+
+[analysis]
+resample_dt = 0.5
+window_seconds = 10.0
+check_interval = 5.0
+tolerance = 0.02
+consecutive_checks = 3
+settle_extension = 20.0
+max_time = 60.0

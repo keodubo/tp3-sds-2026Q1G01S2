@@ -4,7 +4,15 @@ import argparse
 from pathlib import Path
 
 from tp3_sds.paths import find_repo_root
-from tp3_sds.system1 import load_config, run_simulation, validate_config
+from tp3_sds.system1 import (
+    build_delivery_package,
+    load_config,
+    load_study_config,
+    run_simulation,
+    run_study,
+    validate_config,
+    validate_study_config,
+)
 from tp3_sds.wiki import (
     append_log_entry,
     lint_wiki,
@@ -40,6 +48,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_parser = system1_subparsers.add_parser("run", help="Run a System 1 simulation.")
     run_parser.add_argument("--config", required=True, type=Path)
+
+    validate_study_parser = system1_subparsers.add_parser("validate-study", help="Validate a System 1 study TOML config.")
+    validate_study_parser.add_argument("--config", required=True, type=Path)
+
+    study_parser = system1_subparsers.add_parser("study", help="Run the System 1 study pipeline for points 1.1-1.4.")
+    study_parser.add_argument("--config", required=True, type=Path)
+
+    package_parser = system1_subparsers.add_parser("package-delivery", help="Build a compact System 1 delivery zip.")
+    package_parser.add_argument("--output", required=True, type=Path)
 
     return parser
 
@@ -81,11 +98,10 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
     if args.command == "system1":
-        config_path = args.config.resolve()
-        config = load_config(config_path)
-        validation = validate_config(config)
-
         if args.system1_command == "validate-config":
+            config_path = args.config.resolve()
+            config = load_config(config_path)
+            validation = validate_config(config)
             if validation.errors:
                 print("Config validation failed:")
                 for error in validation.errors:
@@ -98,7 +114,26 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"- warning: {warning}")
             return 0
 
+        if args.system1_command == "validate-study":
+            config_path = args.config.resolve()
+            config = load_study_config(config_path)
+            validation = validate_study_config(config)
+            if validation.errors:
+                print("Study config validation failed:")
+                for error in validation.errors:
+                    print(f"- {error}")
+                for warning in validation.warnings:
+                    print(f"- warning: {warning}")
+                return 1
+            print("Study config validation passed.")
+            for warning in validation.warnings:
+                print(f"- warning: {warning}")
+            return 0
+
         if args.system1_command == "run":
+            config_path = args.config.resolve()
+            config = load_config(config_path)
+            validation = validate_config(config)
             if validation.errors:
                 print("Config validation failed:")
                 for error in validation.errors:
@@ -118,6 +153,36 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Processed events: {result.processed_events}")
             print(f"Snapshots written: {result.snapshots_written}")
             print(f"Scanning count: {result.scanning_count}")
+            return 0
+
+        if args.system1_command == "study":
+            config_path = args.config.resolve()
+            config = load_study_config(config_path)
+            validation = validate_study_config(config)
+            if validation.errors:
+                print("Study config validation failed:")
+                for error in validation.errors:
+                    print(f"- {error}")
+                return 1
+            result = run_study(config, config_path=config_path)
+            append_log_entry(
+                root,
+                f"## [{today()}] run | System 1 study",
+                [
+                    f"Executed `tp3 system1 study --config {config_path}`.",
+                    f"Study root: `{result.study_root}`.",
+                    f"Particle counts: {result.particle_counts}.",
+                ],
+            )
+            print(f"Study root: {result.study_root}")
+            print(f"Particle counts: {result.particle_counts}")
+            print(f"Summary: {result.summary_path}")
+            return 0
+
+        if args.system1_command == "package-delivery":
+            output_path = args.output.resolve()
+            build_delivery_package(root, output_path)
+            print(f"Built delivery package at {output_path}")
             return 0
 
     parser.print_help()

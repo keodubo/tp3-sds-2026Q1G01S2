@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
-from tp3_sds.system1.config import SimulationConfig
-from tp3_sds.system1.model import Particle
+from tp3_sds.system1.config import OutputConfig, SimulationConfig
+from tp3_sds.system1.model import Particle, ParticleState
 
 
 @dataclass(frozen=True)
@@ -14,6 +14,12 @@ class ParsedStep:
     time: float
     n_used: int
     particles: list[dict[str, object]]
+
+
+def particle_color(particle: Particle, output_config: OutputConfig) -> tuple[int, int, int]:
+    if particle.state == ParticleState.USED:
+        return output_config.used_color
+    return output_config.fresh_color
 
 
 class SnapshotWriter:
@@ -33,12 +39,15 @@ class SnapshotWriter:
         self.handle.write(f"obstacle_radius = {geometry.obstacle_radius:.6f}\n")
         self.handle.write(f"particle_radius = {geometry.particle_radius:.6f}\n")
         self.handle.write(f"snapshot_every = {self.config.output.snapshot_every}\n")
+        self.handle.write(f"fresh_color = {','.join(str(value) for value in self.config.output.fresh_color)}\n")
+        self.handle.write(f"used_color = {','.join(str(value) for value in self.config.output.used_color)}\n")
         self.handle.write("---\n")
 
     def write_step(self, event_id: int, time: float, particles: list[Particle]) -> None:
-        n_used = sum(p.state.value == "used" for p in particles)
+        n_used = sum(particle.state == ParticleState.USED for particle in particles)
         self.handle.write(f"step event_id={event_id} time={time:.6f} n_used={n_used}\n")
         for particle in particles:
+            red, green, blue = particle_color(particle, self.config.output)
             self.handle.write(
                 "particle "
                 f"id={particle.id} "
@@ -46,7 +55,10 @@ class SnapshotWriter:
                 f"y={particle.y:.6f} "
                 f"vx={particle.vx:.6f} "
                 f"vy={particle.vy:.6f} "
-                f"state={particle.state.value}\n"
+                f"state={particle.state.value} "
+                f"r={red} "
+                f"g={green} "
+                f"b={blue}\n"
             )
 
 
@@ -74,6 +86,9 @@ def parse_output(path: Path) -> list[ParsedStep]:
                     "vx": float(parts["vx"]),
                     "vy": float(parts["vy"]),
                     "state": parts["state"],
+                    "r": int(parts["r"]),
+                    "g": int(parts["g"]),
+                    "b": int(parts["b"]),
                 }
             )
     if current is not None:

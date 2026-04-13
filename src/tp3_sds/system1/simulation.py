@@ -5,11 +5,12 @@ import math
 import random
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TextIO
 
 from tp3_sds.system1.config import SimulationConfig, validate_config
 from tp3_sds.system1.events import Event, EventKind
 from tp3_sds.system1.model import Geometry, Particle, ParticleState
-from tp3_sds.system1.observables import RadialProfileBin, System1Observables
+from tp3_sds.system1.observables import RadialProfileBin, RadialProfileSnapshot, System1Observables
 from tp3_sds.system1.output import SnapshotWriter
 
 EPSILON = 1e-9
@@ -22,151 +23,217 @@ class SimulationResult:
     snapshots_written: int
     final_time: float
     scanning_count: int
+    center_contact_series: list[tuple[float, int]]
     used_fraction_history: list[tuple[float, float]]
     radial_profiles: list[RadialProfileBin]
+    radial_profile_samples: list[RadialProfileSnapshot]
     final_particles: list[Particle]
 
 
-def run_simulation(config: SimulationConfig, config_path: Path | None = None) -> SimulationResult:
-    validation = validate_config(config)
-    if not validation.is_valid:
-        raise ValueError("; ".join(validation.errors))
+class SimulationEngine:
+    def __init__(
+        self,
+        config: SimulationConfig,
+        *,
+        writer_handle: TextIO | None = None,
+        config_path: Path | None = None,
+    ) -> None:
+        validation = validate_config(config)
+        if not validation.is_valid:
+            raise ValueError("; ".join(validation.errors))
 
-    particles = generate_initial_particles(config)
-    observables = System1Observables(config.geometry, config.observables.radial_bin_width)
-    queue: list[Event] = []
-    sequence = 0
-    current_time = 0.0
-    processed_events = 0
-    snapshots_written = 0
-    last_snapshot_time = -math.inf
+        self.config = config
+        self.config_path = config_path
+        self.writer = SnapshotWriter(writer_handle, config, config_path=config_path) if writer_handle is not None else None
+        self.observables = System1Observables(config.geometry, config.observables.radial_bin_width)
+        self.particles = generate_initial_particles(config)
+        self.current_time = 0.0
+        self.processed_events = 0
+        self.snapshots_written = 0
+        self.last_snapshot_time = -math.inf
+        self.last_snapshot_event_id: int | None = None
+        self._queue: list[Event] = []
+        self._sequence = 0
 
-    def next_sequence() -> int:
-        nonlocal sequence
-        sequence += 1
-        return sequence
+        if self.writer is not None:
+            self.writer.write_header()
 
-    def push_event(event: Event) -> None:
-        heapq.heappush(queue, event)
+        self._schedule_initial_events()
+        self._record_snapshot(0)
 
-    def schedule_particle_events(particle_index: int, now: float) -> None:
-        particle = particles[particle_index]
-        t_outer = predict_outer_wall_collision_time(particle, config.geometry)
-        if math.isfinite(t_outer) and now + t_outer <= config.duration + EPSILON:
-            push_event(
+    def run_until(self, target_time: float) -> None:
+        if target_time < self.current_time - EPSILON:
+            raise ValueError("target_time must not move the simulation backwards.")
+
+        while True:
+            event = self._pop_next_valid_event()
+            if event is None or event.time > target_time + EPSILON:
+                break
+
+            self._advance_all(event.time - self.current_time)
+            self.current_time = event.time
+            touched = self._process_event(event)
+            self.processed_events += 1
+
+            self._schedule_events_for_touched(touched)
+            if self.processed_events % self.config.output.snapshot_every == 0:
+                self._record_snapshot(self.processed_events)
+
+        if target_time > self.current_time + EPSILON:
+            self._advance_all(target_time - self.current_time)
+            self.current_time = target_time
+
+    def finalize(self, *, force_final_snapshot: bool = True) -> SimulationResult:
+        if force_final_snapshot and (
+            self.last_snapshot_event_id != self.processed_events
+            or abs(self.current_time - self.last_snapshot_time) > EPSILON
+        ):
+            self._record_snapshot(self.processed_events)
+
+        return SimulationResult(
+            output_path=self.config.output.path,
+            processed_events=self.processed_events,
+            snapshots_written=self.snapshots_written,
+            final_time=self.current_time,
+            scanning_count=self.observables.scanning_count,
+            center_contact_series=list(self.observables.center_contact_series),
+            used_fraction_history=list(self.observables.used_fraction_history),
+            radial_profiles=self.observables.export_radial_profiles(),
+            radial_profile_samples=list(self.observables.radial_profile_samples),
+            final_particles=[clone_particle(particle) for particle in self.particles],
+        )
+
+    def _schedule_initial_events(self) -> None:
+        for index in range(len(self.particles)):
+            self._schedule_boundary_events(index)
+        for index in range(len(self.particles)):
+            for other_index in range(index + 1, len(self.particles)):
+                self._schedule_pair_event(index, other_index)
+
+    def _schedule_events_for_touched(self, touched: set[int]) -> None:
+        touched_sorted = sorted(touched)
+        touched_set = set(touched_sorted)
+        for index in touched_sorted:
+            self._schedule_boundary_events(index)
+            for other_index in range(index + 1, len(self.particles)):
+                self._schedule_pair_event(index, other_index)
+            for other_index in range(index):
+                if other_index in touched_set:
+                    continue
+                self._schedule_pair_event(other_index, index)
+
+    def _schedule_boundary_events(self, particle_index: int) -> None:
+        particle = self.particles[particle_index]
+        t_outer = predict_outer_wall_collision_time(particle, self.config.geometry)
+        if math.isfinite(t_outer):
+            self._push_event(
                 Event(
-                    time=now + t_outer,
-                    sequence=next_sequence(),
+                    time=self.current_time + t_outer,
+                    sequence=self._next_sequence(),
                     kind=EventKind.OUTER_WALL,
                     particle_a=particle_index,
                     count_a=particle.collision_count,
                 )
             )
 
-        t_inner = predict_inner_obstacle_collision_time(particle, config.geometry)
-        if math.isfinite(t_inner) and now + t_inner <= config.duration + EPSILON:
-            push_event(
+        t_inner = predict_inner_obstacle_collision_time(particle, self.config.geometry)
+        if math.isfinite(t_inner):
+            self._push_event(
                 Event(
-                    time=now + t_inner,
-                    sequence=next_sequence(),
+                    time=self.current_time + t_inner,
+                    sequence=self._next_sequence(),
                     kind=EventKind.INNER_OBSTACLE,
                     particle_a=particle_index,
                     count_a=particle.collision_count,
                 )
             )
 
-        for other_index, other in enumerate(particles):
-            if other_index == particle_index:
+    def _schedule_pair_event(self, index_a: int, index_b: int) -> None:
+        particle_a = self.particles[index_a]
+        particle_b = self.particles[index_b]
+        collision_time = predict_particle_collision_time(particle_a, particle_b)
+        if not math.isfinite(collision_time):
+            return
+        self._push_event(
+            Event(
+                time=self.current_time + collision_time,
+                sequence=self._next_sequence(),
+                kind=EventKind.PARTICLE,
+                particle_a=index_a,
+                particle_b=index_b,
+                count_a=particle_a.collision_count,
+                count_b=particle_b.collision_count,
+            )
+        )
+
+    def _process_event(self, event: Event) -> set[int]:
+        touched: set[int] = set()
+        if event.kind == EventKind.PARTICLE:
+            resolve_particle_collision(
+                self.particles[event.particle_a],
+                self.particles[event.particle_b],
+            )
+            touched.update({event.particle_a, event.particle_b})
+        elif event.kind == EventKind.OUTER_WALL:
+            handle_boundary_collision(
+                self.particles[event.particle_a],
+                EventKind.OUTER_WALL,
+                self.observables,
+                self.current_time,
+            )
+            touched.add(event.particle_a)
+        elif event.kind == EventKind.INNER_OBSTACLE:
+            handle_boundary_collision(
+                self.particles[event.particle_a],
+                EventKind.INNER_OBSTACLE,
+                self.observables,
+                self.current_time,
+            )
+            touched.add(event.particle_a)
+
+        if self.processed_events + 1 > self.config.max_events:
+            raise RuntimeError("Maximum event budget reached before the simulation completed.")
+
+        return touched
+
+    def _record_snapshot(self, event_id: int) -> None:
+        self.observables.record_snapshot(self.current_time, self.particles)
+        if self.writer is not None:
+            self.writer.write_step(event_id, self.current_time, self.particles)
+        self.snapshots_written += 1
+        self.last_snapshot_time = self.current_time
+        self.last_snapshot_event_id = event_id
+
+    def _push_event(self, event: Event) -> None:
+        heapq.heappush(self._queue, event)
+
+    def _pop_next_valid_event(self) -> Event | None:
+        while self._queue:
+            event = heapq.heappop(self._queue)
+            if event.time + EPSILON < self.current_time:
                 continue
-            collision_time = predict_particle_collision_time(particle, other)
-            if math.isfinite(collision_time) and now + collision_time <= config.duration + EPSILON:
-                push_event(
-                    Event(
-                        time=now + collision_time,
-                        sequence=next_sequence(),
-                        kind=EventKind.PARTICLE,
-                        particle_a=particle_index,
-                        particle_b=other_index,
-                        count_a=particle.collision_count,
-                        count_b=other.collision_count,
-                    )
-                )
+            if not event.is_valid(self.particles):
+                continue
+            return event
+        return None
 
-    for index in range(len(particles)):
-        schedule_particle_events(index, current_time)
-    push_event(Event(time=config.duration, sequence=next_sequence(), kind=EventKind.STOP))
+    def _next_sequence(self) -> int:
+        self._sequence += 1
+        return self._sequence
 
+    def _advance_all(self, dt: float) -> None:
+        if abs(dt) <= EPSILON:
+            return
+        for particle in self.particles:
+            particle.advance(dt)
+
+
+def run_simulation(config: SimulationConfig, config_path: Path | None = None) -> SimulationResult:
     config.output.path.parent.mkdir(parents=True, exist_ok=True)
     with config.output.path.open("w", encoding="utf-8") as handle:
-        writer = SnapshotWriter(handle, config, config_path=config_path)
-        writer.write_header()
-        observables.record_snapshot(0.0, particles)
-        writer.write_step(0, 0.0, particles)
-        snapshots_written += 1
-        last_snapshot_time = 0.0
-
-        while queue:
-            event = heapq.heappop(queue)
-            if event.time + EPSILON < current_time:
-                continue
-            if not event.is_valid(particles):
-                continue
-
-            advance_all(particles, event.time - current_time)
-            current_time = event.time
-
-            if event.kind == EventKind.STOP:
-                if current_time > last_snapshot_time + EPSILON:
-                    observables.record_snapshot(current_time, particles)
-                    writer.write_step(processed_events, current_time, particles)
-                    snapshots_written += 1
-                break
-
-            if processed_events >= config.max_events:
-                raise RuntimeError("Maximum event budget reached before simulation stop event.")
-
-            touched: set[int] = set()
-            if event.kind == EventKind.PARTICLE:
-                resolve_particle_collision(
-                    particles[event.particle_a],
-                    particles[event.particle_b],
-                )
-                touched.update({event.particle_a, event.particle_b})
-            elif event.kind == EventKind.OUTER_WALL:
-                handle_boundary_collision(
-                    particles[event.particle_a],
-                    EventKind.OUTER_WALL,
-                    observables,
-                )
-                touched.add(event.particle_a)
-            elif event.kind == EventKind.INNER_OBSTACLE:
-                handle_boundary_collision(
-                    particles[event.particle_a],
-                    EventKind.INNER_OBSTACLE,
-                    observables,
-                )
-                touched.add(event.particle_a)
-
-            processed_events += 1
-            for index in touched:
-                schedule_particle_events(index, current_time)
-
-            if processed_events % config.output.snapshot_every == 0:
-                observables.record_snapshot(current_time, particles)
-                writer.write_step(processed_events, current_time, particles)
-                snapshots_written += 1
-                last_snapshot_time = current_time
-
-    return SimulationResult(
-        output_path=config.output.path,
-        processed_events=processed_events,
-        snapshots_written=snapshots_written,
-        final_time=current_time,
-        scanning_count=observables.scanning_count,
-        used_fraction_history=observables.used_fraction_history,
-        radial_profiles=observables.radial_profiles.export(),
-        final_particles=[clone_particle(particle) for particle in particles],
-    )
+        engine = SimulationEngine(config, writer_handle=handle, config_path=config_path)
+        engine.run_until(config.duration)
+        return engine.finalize(force_final_snapshot=True)
 
 
 def clone_particle(particle: Particle) -> Particle:
@@ -185,43 +252,83 @@ def clone_particle(particle: Particle) -> Particle:
 
 def generate_initial_particles(config: SimulationConfig) -> list[Particle]:
     generator = random.Random(config.seed)
+    try:
+        return _generate_particles_random_rejection(config, generator)
+    except ValueError:
+        return _generate_particles_ring_seeded(config, generator)
+
+
+def _generate_particles_random_rejection(config: SimulationConfig, generator: random.Random) -> list[Particle]:
     particles: list[Particle] = []
     inner = config.geometry.inner_travel_radius
     outer = config.geometry.outer_travel_radius
-    max_attempts = max(5000, config.particles.count * 3000)
+    max_attempts = max(2000, config.particles.count * 1500)
 
     for particle_id in range(config.particles.count):
+        placed = False
         for _ in range(max_attempts):
             radius = math.sqrt(generator.uniform(inner * inner, outer * outer))
             angle = generator.uniform(0.0, 2.0 * math.pi)
             x = radius * math.cos(angle)
             y = radius * math.sin(angle)
-            if all(distance_between_xy(x, y, other.x, other.y) >= 2.0 * config.geometry.particle_radius - EPSILON for other in particles):
-                velocity_angle = generator.uniform(0.0, 2.0 * math.pi)
-                particles.append(
-                    Particle(
-                        id=particle_id,
-                        x=x,
-                        y=y,
-                        vx=config.particles.speed * math.cos(velocity_angle),
-                        vy=config.particles.speed * math.sin(velocity_angle),
-                        radius=config.geometry.particle_radius,
-                        mass=config.particles.mass,
-                    )
-                )
+            if all(
+                distance_between_xy(x, y, other.x, other.y) >= 2.0 * config.geometry.particle_radius - EPSILON
+                for other in particles
+            ):
+                particles.append(_build_particle(config, generator, particle_id, x, y))
+                placed = True
                 break
-        else:
-            raise ValueError(
-                "Unable to place particles without overlap. Lower particles.count or particle_radius."
-            )
+        if not placed:
+            raise ValueError("Random rejection initialization failed.")
     return particles
 
 
-def advance_all(particles: list[Particle], dt: float) -> None:
-    if abs(dt) <= EPSILON:
-        return
-    for particle in particles:
-        particle.advance(dt)
+def _generate_particles_ring_seeded(config: SimulationConfig, generator: random.Random) -> list[Particle]:
+    spacing = 2.05 * config.geometry.particle_radius
+    inner = config.geometry.inner_travel_radius
+    outer = config.geometry.outer_travel_radius
+    candidate_positions: list[tuple[float, float]] = []
+    ring_radius = inner
+
+    while ring_radius <= outer + EPSILON:
+        circumference = 2.0 * math.pi * ring_radius
+        slot_count = max(1, int(circumference / spacing))
+        angle_offset = generator.uniform(0.0, 2.0 * math.pi)
+        for slot in range(slot_count):
+            angle = angle_offset + slot * (2.0 * math.pi / slot_count)
+            candidate_positions.append((ring_radius * math.cos(angle), ring_radius * math.sin(angle)))
+        ring_radius += spacing
+
+    generator.shuffle(candidate_positions)
+    if len(candidate_positions) < config.particles.count:
+        raise ValueError("Unable to initialize the requested number of particles inside the annulus.")
+
+    particles = [
+        _build_particle(config, generator, particle_id, x, y)
+        for particle_id, (x, y) in enumerate(candidate_positions[: config.particles.count])
+    ]
+    if has_any_overlap(particles):
+        raise ValueError("Fallback initialization produced overlapping particles.")
+    return particles
+
+
+def _build_particle(
+    config: SimulationConfig,
+    generator: random.Random,
+    particle_id: int,
+    x: float,
+    y: float,
+) -> Particle:
+    velocity_angle = generator.uniform(0.0, 2.0 * math.pi)
+    return Particle(
+        id=particle_id,
+        x=x,
+        y=y,
+        vx=config.particles.speed * math.cos(velocity_angle),
+        vy=config.particles.speed * math.sin(velocity_angle),
+        radius=config.geometry.particle_radius,
+        mass=config.particles.mass,
+    )
 
 
 def predict_particle_collision_time(particle_a: Particle, particle_b: Particle) -> float:
@@ -304,11 +411,12 @@ def handle_boundary_collision(
     particle: Particle,
     kind: EventKind,
     observables: System1Observables,
+    current_time: float,
 ) -> None:
     reflect_velocity(particle)
     was_fresh = particle.state == ParticleState.FRESH
     if kind == EventKind.INNER_OBSTACLE:
-        observables.note_center_contact(was_fresh=was_fresh)
+        observables.note_center_contact(current_time, was_fresh=was_fresh)
         particle.state = ParticleState.USED
     elif kind == EventKind.OUTER_WALL and particle.state == ParticleState.USED:
         particle.state = ParticleState.FRESH

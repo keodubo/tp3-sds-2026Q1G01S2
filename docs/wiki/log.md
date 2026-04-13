@@ -35,7 +35,17 @@ Chronological record of knowledge ingestion and synthesis operations.
 - Added the initial event-driven hard-sphere engine foundation and its tests.
 - Standardized the wiki on frontmatter plus generated index sections.
 
+## [2026-04-13] refactor | TP3 Detailed System 1 Study Pipeline
+- Re-ingested [Source: TP3 Enunciado](source_tp3_enunciado.md) with detailed sections for deliverables, output contract, and points 1.1-1.4.
+- Added [Analysis: System 1 Experimental Protocol](system_1_experimental_protocol.md) to lock the study methodology used by the repository.
+- Extended the System 1 wiki pages so they match the implemented `run`, `study`, and `package-delivery` workflows.
+
 ## [2026-04-13] run | System 1 simulation
 - Executed `tp3 system1 run --config /Users/keoni/Claude-Workspace/projects/tp3-sds-2026Q1G01S2/configs/system1.example.toml`.
 - Generated output: `/Users/keoni/Claude-Workspace/projects/tp3-sds-2026Q1G01S2/artifacts/system1/example_run.txt`.
 - Processed events: 2.
+
+## [2026-04-13] run | System 1 study
+- Executed `tp3 system1 study --config /Users/keoni/Claude-Workspace/projects/tp3-sds-2026Q1G01S2/configs/system1.study.example.toml`.
+- Study root: `/Users/keoni/Claude-Workspace/projects/tp3-sds-2026Q1G01S2/artifacts/system1/studies/example-study`.
+- Particle counts: [8, 12].

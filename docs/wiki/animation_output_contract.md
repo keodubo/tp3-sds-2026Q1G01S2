@@ -1,41 +1,55 @@
 ---
 type: "analysis"
 title: "Analysis: Animation Output Contract"
-summary: "Repository decision for the text format emitted by the System 1 simulation motor."
+summary: "Plain-text output contract for System 1, now including explicit RGB color per particle to satisfy the TP statement."
 tags: ["analysis", "system1", "output", "animation"]
 sources: ["source_tp3_enunciado.md", "source_guia_presentaciones.md"]
 last_updated: "2026-04-13"
 ---
 # Analysis: Animation Output Contract
 
-The TP requires the simulation motor to emit a text file that an external animation module can replay independently. The current repository fixes a minimal stable contract now so the engine and the animator remain decoupled.
+The assignment explicitly asks the simulation motor to print particle positions, velocities, and color. The repository therefore treats RGB color as part of the simulation output, not as implicit UI logic.
 
 ## Current File Shape
-- Header with metadata:
+- Header metadata:
+  - config path
   - duration
   - particle count
   - domain diameter
   - obstacle radius
   - particle radius
   - snapshot cadence
+  - fresh color
+  - used color
 - Repeated `step` entries:
   - `event_id`
   - `time`
   - `n_used`
-- Repeated `particle` lines per step:
+- Repeated `particle` entries:
   - `id`
   - `x`
   - `y`
   - `vx`
   - `vy`
   - `state`
+  - `r`
+  - `g`
+  - `b`
 
-## Design Rationale
-- The outer boundary and the obstacle are fixed geometry, so they stay in metadata instead of being emitted as pseudo-particles.
-- Recording by event count matches the assignment wording and fits [Concept: Event-Driven Simulation](event_driven_simulation.md).
-- The contract stays plain text and parseable without requiring any binary tooling.
+## Default Color Mapping
+- `fresh = (0,255,0)`
+- `used = (148,0,211)`
+
+## Why This Contract Exists
+- It is directly aligned with the wording of [Source: TP3 Enunciado](source_tp3_enunciado.md).
+- It decouples the simulator from any future animation renderer.
+- It makes the output self-describing enough for debugging and presentation asset generation.
+
+## What Is Not Emitted Per Step
+- The outer boundary and the central obstacle are not encoded as pseudo-particles.
+- Geometry stays in header metadata because it is static for the entire run.
 
 ## Related Pages
 - [System 1: Scanning Rate](system_1_scanning_rate.md)
-- [Decision: V1 Foundation Scope](decision_v1_foundation_scope.md)
-- [Source: TP3 Enunciado](source_tp3_enunciado.md)
+- [Observable: System 1 Measurements](system_1_observables.md)
+- [Analysis: System 1 Experimental Protocol](system_1_experimental_protocol.md)

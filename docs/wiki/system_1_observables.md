@@ -1,38 +1,59 @@
 ---
 type: "observable"
 title: "Observable: System 1 Measurements"
-summary: "Required TP3 observables for System 1, including scanning rate, used fraction, radial profiles, and execution-time scaling."
+summary: "Detailed measurement contract for TP3 points 1.1-1.4, including runtime, scanning rate, stationary used fraction, and radial profiles."
 tags: ["observable", "system1", "statistics"]
 sources: ["source_tp3_enunciado.md", "source_teorica_0.md", "source_guia_presentaciones.md"]
 last_updated: "2026-04-13"
 ---
 # Observable: System 1 Measurements
 
-The current engine foundation already accumulates the raw ingredients for the main `Sistema 1` observables, even though plotting and sweep orchestration are intentionally left outside v1.
+The repository now supports the full measurement surface required by the statement, not just the raw motor state.
 
-## Required Measurements
-1. Execution time versus `N` for fixed absolute simulation time `tf = 5 s`.
-2. `C_fc(t)`: cumulative number of fresh particles that contacted the center and changed state.
-3. `J`: slope of a linear interpolation of `C_fc(t)`.
-4. `F_u(t) = N_u(t)/N`: used-particle fraction versus time.
-5. `F_est`: stationary used fraction.
-6. Radial profiles of inward fresh particles:
-   - `⟨ρ_f^in⟩(S)`
-   - `⟨v_f^in⟩(S)`
-   - `J_in(S) = ⟨ρ_f^in⟩(S) |⟨v_f^in⟩(S)|`
+## 1.1 Runtime vs N
+- Absolute simulation horizon fixed at `tf = 5 s`.
+- Runtime is measured as wall-clock time of the full motor execution, including snapshot writing.
+- Default study policy:
+  - `5` repetitions per `N`
+  - mean and standard deviation reported
+  - if `counts_mode = auto`, stop exploring larger `N` after the median runtime exceeds `20 s`
 
-## Averaging Rules to Preserve
-- Run multiple realizations with different random seeds for stochastic summaries.
-- Report mean values with standard deviations or error bars where applicable.
-- Do not print more significant digits than the uncertainty justifies, as stressed in [Source: Teorica 0](source_teorica_0.md).
+## 1.2 Scanning Rate
+- Preserve the full `C_fc(t)` series of `fresh -> used` center contacts.
+- Always include the initial point `(0, 0)`.
+- Compute `J` per realization using OLS slope over the full `C_fc(t)` series in physical time.
+- Aggregate `⟨J⟩(N)` and standard deviation across realizations.
 
-## Radial-Profile Selection
-- Use concentric shells around the central obstacle.
-- Restrict the sample to fresh particles whose radial velocity points inward.
-- Average density and normal velocity across sampled times and realizations.
+## 1.3 Used Fraction
+- Preserve snapshot history of `F_u(t) = N_u(t)/N`.
+- Resample with zero-order hold on a uniform grid with `Δt = 0.5 s`.
+- Detect stationarity using the protocol defined in [Analysis: System 1 Experimental Protocol](system_1_experimental_protocol.md).
+- Report:
+  - `t_stationary(N)`
+  - `F_est(N)`
+  - number of realizations that did or did not reach stationarity before the safety cutoff
+
+## 1.4 Radial Profiles
+- Shell width fixed at `dS = 0.2 m`.
+- Restrict the sample to fresh particles with `R · v < 0`.
+- Density averaging:
+  - compute shell density at each sampled time
+  - average over post-stationary time samples
+  - then average across realizations
+- Normal velocity averaging:
+  - average only across valid inward particles
+  - do not inject artificial zeros when a shell is empty
+- Derived flux:
+  - `J_in(S) = <ρ_f^in>(S) |<v_f^in>(S)|`
+
+## Output Products from `tp3 system1 study`
+- Raw realization files under `raw/`
+- Snapshot outputs under `runs/`
+- Aggregate CSVs under `aggregates/`
+- PNG figures under `figures/`
+- Markdown summary under `summary.md`
 
 ## Related Pages
-- [System 1: Scanning Rate](system_1_scanning_rate.md)
 - [Source: TP3 Enunciado](source_tp3_enunciado.md)
-- [Source: Teorica 0](source_teorica_0.md)
-- [Source: Guia Presentaciones](source_guia_presentaciones.md)
+- [Analysis: System 1 Experimental Protocol](system_1_experimental_protocol.md)
+- [Analysis: Animation Output Contract](animation_output_contract.md)
