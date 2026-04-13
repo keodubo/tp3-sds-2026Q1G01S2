@@ -287,10 +287,15 @@ def _generate_particles_ring_seeded(config: SimulationConfig, generator: random.
     spacing = 2.05 * config.geometry.particle_radius
     inner = config.geometry.inner_travel_radius
     outer = config.geometry.outer_travel_radius
+    span = outer - inner
+    edge_margin = min(config.geometry.particle_radius * 0.05, span / 4.0)
+    if edge_margin <= EPSILON:
+        raise ValueError("Unable to place fallback initialization rings strictly inside the annulus.")
     candidate_positions: list[tuple[float, float]] = []
-    ring_radius = inner
+    ring_radius = inner + edge_margin
+    max_ring_radius = outer - edge_margin
 
-    while ring_radius <= outer + EPSILON:
+    while ring_radius <= max_ring_radius + EPSILON:
         circumference = 2.0 * math.pi * ring_radius
         slot_count = max(1, int(circumference / spacing))
         angle_offset = generator.uniform(0.0, 2.0 * math.pi)

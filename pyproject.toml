@@ -8,7 +8,10 @@ version = "0.1.0"
 description = "Persistent wiki and System 1 event-driven hard-sphere foundation for SDS TP3."
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["matplotlib>=3.8,<4"]
+dependencies = [
+    "matplotlib>=3.8,<4",
+    "Pillow>=10,<12",
+]
 
 [project.scripts]
 tp3 = "tp3_sds.cli:main"

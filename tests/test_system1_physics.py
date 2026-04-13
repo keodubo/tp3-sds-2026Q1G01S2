@@ -11,6 +11,7 @@ from tp3_sds.system1.observables import System1Observables, aggregate_radial_pro
 from tp3_sds.system1.output import SnapshotWriter
 from tp3_sds.system1.simulation import (
     SimulationEngine,
+    _generate_particles_ring_seeded,
     handle_boundary_collision,
     predict_inner_obstacle_collision_time,
     predict_outer_wall_collision_time,
@@ -126,6 +127,19 @@ def test_snapshot_serialization_includes_colors(tmp_path: Path) -> None:
     assert "used_color = 148,0,211" in text
     assert "particle id=0 x=1.000000 y=2.000000 vx=0.500000 vy=-0.500000 state=fresh r=0 g=255 b=0" in text
     assert "particle id=1 x=2.000000 y=1.000000 vx=-0.500000 vy=0.500000 state=used r=148 g=0 b=211" in text
+
+
+def test_ring_seeded_fallback_stays_strictly_inside_annulus(tmp_path: Path) -> None:
+    config = make_config(tmp_path / "output.txt")
+    particles = _generate_particles_ring_seeded(config, __import__("random").Random(7))
+
+    assert particles
+    inner = config.geometry.inner_travel_radius
+    outer = config.geometry.outer_travel_radius
+    for particle in particles:
+        radius = particle.distance_to_origin()
+        assert radius > inner
+        assert radius < outer
 
 
 def test_engine_schedules_unique_pair_events(tmp_path: Path) -> None:

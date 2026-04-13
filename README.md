@@ -20,6 +20,7 @@ The repo has two main responsibilities:
 The current System 1 tooling can generate:
 
 - a single-run snapshot file for an external animator or inspection,
+- a GIF animation rendered directly from the snapshot file,
 - a study for points `1.1` to `1.4` with CSV aggregates and PNG figures,
 - a compact delivery zip with only the simulation code and minimal run files.
 
@@ -54,9 +55,10 @@ This executes, in order:
 
 1. `system1 validate-config`
 2. `system1 run`
-3. `system1 validate-study`
-4. `system1 study`
-5. `system1 package-delivery`
+3. `system1 animate`
+4. `system1 validate-study`
+5. `system1 study`
+6. `system1 package-delivery`
 
 The script uses these defaults:
 
@@ -82,6 +84,7 @@ If you do not want to use `generate_all.sh`, run the commands directly from the 
 ```bash
 PYTHONPATH=src python3 -m tp3_sds system1 validate-config --config configs/system1.example.toml
 PYTHONPATH=src python3 -m tp3_sds system1 run --config configs/system1.example.toml
+PYTHONPATH=src python3 -m tp3_sds system1 animate --input artifacts/system1/example_run.txt --output artifacts/system1/example_run.gif
 PYTHONPATH=src python3 -m tp3_sds system1 validate-study --config configs/system1.study.example.toml
 PYTHONPATH=src python3 -m tp3_sds system1 study --config configs/system1.study.example.toml
 PYTHONPATH=src python3 -m tp3_sds system1 package-delivery --output artifacts/system1/delivery/system1-motor.zip
@@ -92,16 +95,32 @@ PYTHONPATH=src python3 -m tp3_sds system1 package-delivery --output artifacts/sy
 ```bash
 tp3 system1 validate-config --config configs/system1.example.toml
 tp3 system1 run --config configs/system1.example.toml
+tp3 system1 animate --input artifacts/system1/example_run.txt --output artifacts/system1/example_run.gif
 tp3 system1 validate-study --config configs/system1.study.example.toml
 tp3 system1 study --config configs/system1.study.example.toml
 tp3 system1 package-delivery --output artifacts/system1/delivery/system1-motor.zip
 ```
+
+## Animation
+
+The animator reads the existing plain-text snapshot format, so there is no second export path to maintain.
+
+```bash
+tp3 system1 run --config configs/system1.example.toml
+tp3 system1 animate --input artifacts/system1/example_run.txt --output artifacts/system1/example_run.gif
+```
+
+Optional flags:
+
+- `--fps 12` controls playback speed independently from simulation time.
+- `--show-step-label` overlays the event id, physical time, and used-particle count.
 
 ## Useful Outputs
 
 After a normal run, the main files to inspect are:
 
 - single-run snapshots: `artifacts/system1/example_run.txt`
+- rendered animation: `artifacts/system1/example_run.gif`
 - study summary: `artifacts/system1/studies/example-study/summary.md`
 - delivery package: `artifacts/system1/delivery/system1-motor.zip`
 
@@ -135,4 +154,4 @@ pytest -q
 
 - `generate_all.sh` is the safest default for a first full run because it validates configs before executing anything expensive.
 - The example study config is intentionally small; it is for verification, not for final delivery-quality measurements.
-- The repo currently generates text snapshots and study figures, but it does not yet include a dedicated visual animator.
+- The animation uses the snapshot header geometry directly, so the outer boundary, obstacle, and particle scale stay consistent with the simulation output.

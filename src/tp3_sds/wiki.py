@@ -117,7 +117,7 @@ def scaffold_source(root: Path, raw_path: Path) -> Path:
         "title": f"Source: {title}",
         "summary": "Pending manual ingest.",
         "tags": ["source"],
-        "source_path": str(Path("docs/raw") / relative_raw),
+        "source_path": (Path("docs/raw") / relative_raw).as_posix(),
         "last_updated": today(),
     }
 
@@ -359,8 +359,11 @@ def _search_with_rg(root: Path, query: str) -> list[SearchResult]:
             capture_output=True,
             text=True,
         )
-    except FileNotFoundError:
-        return []
+    except (FileNotFoundError, PermissionError, OSError):
+        return _search_without_rg(wiki_root, query)
+
+    if completed.returncode not in {0, 1}:
+        return _search_without_rg(wiki_root, query)
 
     results: list[SearchResult] = []
     for line in completed.stdout.splitlines():
@@ -381,4 +384,26 @@ def _search_with_rg(root: Path, query: str) -> list[SearchResult]:
                 snippet=snippet.strip(),
             )
         )
+    return results
+
+
+def _search_without_rg(wiki_root: Path, query: str) -> list[SearchResult]:
+    needle = query.lower()
+    results: list[SearchResult] = []
+    for path in sorted(wiki_root.glob("*.md")):
+        if path.name == INDEX_FILE:
+            continue
+        page = load_page(path)
+        for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if needle not in line.lower():
+                continue
+            results.append(
+                SearchResult(
+                    path=path,
+                    title=str(page.metadata.get("title", humanize_title(path.stem))),
+                    summary=str(page.metadata.get("summary", "")),
+                    source=f"rg:{line_number}",
+                    snippet=line.strip(),
+                )
+            )
     return results

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from pathlib import Path
 from zipfile import ZipFile
 
 from tp3_sds.cli import main
 from tp3_sds.system1.config import load_config, validate_config
 from tp3_sds.system1.delivery import build_delivery_package
-from tp3_sds.system1.output import parse_output
+from tp3_sds.system1.output import parse_output, parse_snapshot_output
 from tp3_sds.system1.simulation import has_any_overlap, run_simulation
 
 
@@ -50,14 +53,17 @@ def test_system1_smoke_run_generates_parseable_output(tmp_path: Path) -> None:
     assert validation.is_valid, validation.errors
 
     result = run_simulation(config, config_path=config_path)
+    snapshot = parse_snapshot_output(output_path)
     steps = parse_output(output_path)
 
     assert output_path.exists()
     assert steps
+    assert snapshot.header.particle_count == 3
+    assert snapshot.header.particle_radius == 1.0
     assert steps[0].time == 0.0
     assert [step.time for step in steps] == sorted(step.time for step in steps)
     assert steps[-1].time == result.final_time
-    assert {"r", "g", "b"} <= set(steps[0].particles[0].keys())
+    assert (steps[0].particles[0].r, steps[0].particles[0].g, steps[0].particles[0].b) == (0, 255, 0)
     assert not has_any_overlap(result.final_particles)
 
 
@@ -124,6 +130,39 @@ def test_system1_study_and_package_smoke(tmp_path: Path) -> None:
     assert package_path.stat().st_size < 100_000
     with ZipFile(package_path) as archive:
         names = set(archive.namelist())
+        archive.extractall(tmp_path / "delivery")
     assert "README.md" in names
     assert "src/tp3_sds/cli.py" in names
     assert "src/tp3_sds/system1/simulation.py" in names
+
+    delivery_root = tmp_path / "delivery"
+    run_code = """
+import builtins
+from tp3_sds.cli import main
+
+original_import = builtins.__import__
+
+def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if name == "matplotlib" or name.startswith("matplotlib."):
+        raise RuntimeError("unexpected matplotlib import")
+    return original_import(name, globals, locals, fromlist, level)
+
+builtins.__import__ = guarded_import
+raise SystemExit(main(["system1", "run", "--config", "configs/system1.example.toml"]))
+"""
+    environment = os.environ.copy()
+    pythonpath = str(delivery_root / "src")
+    if environment.get("PYTHONPATH"):
+        pythonpath = os.pathsep.join([pythonpath, environment["PYTHONPATH"]])
+    environment["PYTHONPATH"] = pythonpath
+    completed = subprocess.run(
+        [sys.executable, "-c", run_code],
+        cwd=delivery_root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert (delivery_root / "artifacts" / "system1" / "example_run.txt").exists()

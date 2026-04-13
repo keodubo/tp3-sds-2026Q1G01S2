@@ -4,15 +4,9 @@ import argparse
 from pathlib import Path
 
 from tp3_sds.paths import find_repo_root
-from tp3_sds.system1 import (
-    build_delivery_package,
-    load_config,
-    load_study_config,
-    run_simulation,
-    run_study,
-    validate_config,
-    validate_study_config,
-)
+from tp3_sds.system1.config import load_config, load_study_config, validate_config, validate_study_config
+from tp3_sds.system1.delivery import build_delivery_package
+from tp3_sds.system1.simulation import run_simulation
 from tp3_sds.wiki import (
     append_log_entry,
     lint_wiki,
@@ -54,6 +48,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     study_parser = system1_subparsers.add_parser("study", help="Run the System 1 study pipeline for points 1.1-1.4.")
     study_parser.add_argument("--config", required=True, type=Path)
+
+    animate_parser = system1_subparsers.add_parser("animate", help="Render a GIF animation from a System 1 snapshot file.")
+    animate_parser.add_argument("--input", required=True, type=Path)
+    animate_parser.add_argument("--output", required=True, type=Path)
+    animate_parser.add_argument("--fps", type=int, default=12)
+    animate_parser.add_argument("--show-step-label", action="store_true")
 
     package_parser = system1_subparsers.add_parser("package-delivery", help="Build a compact System 1 delivery zip.")
     package_parser.add_argument("--output", required=True, type=Path)
@@ -156,6 +156,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.system1_command == "study":
+            from tp3_sds.system1.study import run_study
+
             config_path = args.config.resolve()
             config = load_study_config(config_path)
             validation = validate_study_config(config)
@@ -177,6 +179,20 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Study root: {result.study_root}")
             print(f"Particle counts: {result.particle_counts}")
             print(f"Summary: {result.summary_path}")
+            return 0
+
+        if args.system1_command == "animate":
+            from tp3_sds.system1.animation import render_snapshot_animation
+
+            input_path = args.input.resolve()
+            output_path = args.output.resolve()
+            render_snapshot_animation(
+                input_path=input_path,
+                output_path=output_path,
+                fps=args.fps,
+                show_step_label=args.show_step_label,
+            )
+            print(f"Wrote animation to {output_path}")
             return 0
 
         if args.system1_command == "package-delivery":
