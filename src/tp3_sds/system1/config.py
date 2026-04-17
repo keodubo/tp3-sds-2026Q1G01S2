@@ -40,7 +40,7 @@ class SimulationConfig:
     observables: ObservableConfig
     duration: float
     seed: int | None = None
-    max_events: int = 100_000
+    max_events: int = 10_000_000
 
 
 @dataclass(frozen=True)
@@ -51,7 +51,7 @@ class StationaryDetectionConfig:
     tolerance: float = 0.02
     consecutive_checks: int = 3
     settle_extension: float = 20.0
-    max_time: float = 200.0
+    max_time: float = 2000.0
 
 
 @dataclass(frozen=True)
@@ -73,10 +73,10 @@ class StudyConfig:
     auto_counts: tuple[int, ...] = DEFAULT_AUTO_COUNTS
     repetitions: int = 5
     seed_start: int = 1
-    runtime_duration: float = 5.0
-    runtime_limit_seconds: float = 20.0
+    runtime_duration: float = 500.0
+    runtime_limit_seconds: float = 2000.0
     stationary: StationaryDetectionConfig = StationaryDetectionConfig()
-    max_events: int = 1_000_000
+    max_events: int = 100_000_000
     fresh_color: tuple[int, int, int] = DEFAULT_FRESH_COLOR
     used_color: tuple[int, int, int] = DEFAULT_USED_COLOR
 
@@ -132,7 +132,7 @@ def load_config(path: Path) -> SimulationConfig:
         particles=particles,
         output=output,
         observables=observables,
-        duration=float(simulation.get("duration", 5.0)),
+        duration=float(simulation.get("duration", 500.0)),
         seed=int(simulation["seed"]) if "seed" in simulation else None,
         max_events=int(simulation.get("max_events", 100_000)),
     )
@@ -174,7 +174,7 @@ def load_study_config(path: Path) -> StudyConfig:
         tolerance=float(analysis_data.get("tolerance", 0.02)),
         consecutive_checks=int(analysis_data.get("consecutive_checks", 3)),
         settle_extension=float(analysis_data.get("settle_extension", 20.0)),
-        max_time=float(analysis_data.get("max_time", 200.0)),
+        max_time=float(analysis_data.get("max_time", 2000.0)),
     )
 
     counts = tuple(int(value) for value in study_data.get("counts", []))
@@ -190,7 +190,7 @@ def load_study_config(path: Path) -> StudyConfig:
         auto_counts=auto_counts,
         repetitions=int(study_data.get("repetitions", 5)),
         seed_start=int(study_data.get("seed_start", 1)),
-        runtime_duration=float(study_data.get("runtime_duration", 5.0)),
+        runtime_duration=float(study_data.get("runtime_duration", 500.0)),
         runtime_limit_seconds=float(study_data.get("runtime_limit_seconds", 20.0)),
         stationary=stationary,
         max_events=int(study_data.get("max_events", 1_000_000)),
