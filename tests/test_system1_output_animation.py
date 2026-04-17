@@ -9,11 +9,7 @@ from textwrap import dedent
 import pytest
 
 from tp3_sds.cli import main
-from tp3_sds.system1.animation import (
-    AnimationFrame,
-    InterpolatedParticle,
-    build_animation_frames,
-)
+from tp3_sds.system1.animation import build_animation_frames
 from tp3_sds.system1.output import (
     ParsedParticle,
     ParsedSnapshotOutput,
