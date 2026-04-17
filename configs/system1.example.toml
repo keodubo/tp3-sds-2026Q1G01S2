@@ -1,7 +1,7 @@
 [simulation]
-duration = 5.0
+duration = 500.0
 seed = 42
-max_events = 20000
+max_events = 2000000
 
 [geometry]
 diameter = 80.0
