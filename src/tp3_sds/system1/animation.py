@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from tp3_sds.system1.output import ParsedSnapshotOutput, ParsedStep, SnapshotHeader, parse_snapshot_output
+from tp3_sds.system1.output import ParsedSnapshotOutput, SnapshotHeader, parse_snapshot_output
 
 DEFAULT_IMAGE_SIZE = 720
 DEFAULT_MARGIN = 24
@@ -77,31 +77,33 @@ def render_snapshot_animation(
     *,
     input_path: Path,
     output_path: Path,
-    fps: int = 12,
+    fps: int = 20,
+    playback_duration: float = DEFAULT_PLAYBACK_DURATION_SECONDS,
     show_step_label: bool = False,
     image_size: int = DEFAULT_IMAGE_SIZE,
     margin: int = DEFAULT_MARGIN,
 ) -> Path:
-    if fps <= 0:
-        raise ValueError("fps must be greater than zero.")
     if image_size <= 2 * margin:
         raise ValueError("image_size must be larger than twice the margin.")
 
     pillow = _load_pillow()
     snapshot_output = parse_snapshot_output(input_path)
+    animation_frames = build_animation_frames(
+        parsed=snapshot_output,
+        fps=fps,
+        playback_duration=playback_duration,
+    )
     frames = [
         _render_frame(
             pillow=pillow,
             header=snapshot_output.header,
-            step=step,
+            animation_frame=animation_frame,
             image_size=image_size,
             margin=margin,
             show_step_label=show_step_label,
         )
-        for step in snapshot_output.steps
+        for animation_frame in animation_frames
     ]
-    if not frames:
-        raise ValueError(f"{input_path} does not contain any frames to animate.")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     frame_duration_ms = max(1, round(1000 / fps))
@@ -122,7 +124,7 @@ def _render_frame(
     *,
     pillow: dict[str, Any],
     header: SnapshotHeader,
-    step: ParsedStep,
+    animation_frame: AnimationFrame,
     image_size: int,
     margin: int,
     show_step_label: bool,
@@ -155,7 +157,7 @@ def _render_frame(
 
     particle_outline = (30, 30, 30)
     particle_width = max(1, line_width - 1)
-    for particle in step.particles:
+    for particle in animation_frame.particles:
         _draw_circle(
             draw=draw,
             center=center,
@@ -170,7 +172,7 @@ def _render_frame(
 
     if show_step_label:
         font = pillow["ImageFont"].load_default()
-        label = f"event={step.event_id}  t={step.time:.3f} s  used={step.n_used}"
+        label = f"t={animation_frame.t_frame:.3f} s  used={animation_frame.n_used}"
         text_box = draw.textbbox((0, 0), label, font=font)
         padding = 6
         box = (

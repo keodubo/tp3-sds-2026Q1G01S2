@@ -115,6 +115,8 @@ def test_system1_animate_cli_writes_gif(tmp_path: Path) -> None:
             str(output_path),
             "--fps",
             "8",
+            "--playback-duration",
+            "0.5",
             "--show-step-label",
         ]
     ) == 0
