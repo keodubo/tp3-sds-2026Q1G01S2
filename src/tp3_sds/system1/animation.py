@@ -25,7 +25,7 @@ class InterpolatedParticle:
 class AnimationFrame:
     t_frame: float
     n_used: int
-    particles: list[InterpolatedParticle]
+    particles: tuple[InterpolatedParticle, ...]
 
 
 def build_animation_frames(
@@ -58,7 +58,7 @@ def build_animation_frames(
         k = max(0, bisect.bisect_right(snapshot_times, t_frame) - 1)
         snap = parsed.steps[k]
         dt = t_frame - snap.time
-        interpolated = [
+        interpolated = tuple(
             InterpolatedParticle(
                 x=particle.x + dt * particle.vx,
                 y=particle.y + dt * particle.vy,
@@ -67,7 +67,7 @@ def build_animation_frames(
                 b=particle.b,
             )
             for particle in snap.particles
-        ]
+        )
         frames.append(AnimationFrame(t_frame=t_frame, n_used=snap.n_used, particles=interpolated))
 
     return frames
