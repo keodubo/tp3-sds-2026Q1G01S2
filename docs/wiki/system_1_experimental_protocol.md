@@ -14,6 +14,7 @@ The statement requires stationary metrics and radial averages, but it does not s
 - If a study config provides an explicit list of `N`, use it as-is.
 - If `counts_mode = auto`, use the default staircase from the study config.
 - Stop extending the staircase after the median runtime for the current `N` exceeds `20 s` per realization.
+- The production `N` grid adopted by this repository is `[10, 50, 100, 200, 400, 800]`. The file `configs/system1.study.example.toml` ships with this grid and `generate_all.sh` consumes it by default.
 
 ## Runtime Study (1.1)
 - Use fixed physical horizon `tf = 500 s` (see [errata](source_tp3_enunciado.md#errata-cátedra)).
