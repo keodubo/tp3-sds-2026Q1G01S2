@@ -134,7 +134,7 @@ def load_config(path: Path) -> SimulationConfig:
         observables=observables,
         duration=float(simulation.get("duration", 500.0)),
         seed=int(simulation["seed"]) if "seed" in simulation else None,
-        max_events=int(simulation.get("max_events", 100_000)),
+        max_events=int(simulation.get("max_events", 10_000_000)),
     )
 
 
@@ -191,9 +191,9 @@ def load_study_config(path: Path) -> StudyConfig:
         repetitions=int(study_data.get("repetitions", 5)),
         seed_start=int(study_data.get("seed_start", 1)),
         runtime_duration=float(study_data.get("runtime_duration", 500.0)),
-        runtime_limit_seconds=float(study_data.get("runtime_limit_seconds", 20.0)),
+        runtime_limit_seconds=float(study_data.get("runtime_limit_seconds", 2000.0)),
         stationary=stationary,
-        max_events=int(study_data.get("max_events", 1_000_000)),
+        max_events=int(study_data.get("max_events", 100_000_000)),
         fresh_color=_parse_color(study_data.get("fresh_color"), DEFAULT_FRESH_COLOR),
         used_color=_parse_color(study_data.get("used_color"), DEFAULT_USED_COLOR),
     )
