@@ -4,7 +4,7 @@ title: "System 1: Scanning Rate"
 summary: "Hard-sphere event-driven dynamics in a circular enclosure, with stateful particles, explicit color output, and a study pipeline for TP3 points 1.1-1.4."
 tags: ["system", "system1", "hard-spheres", "event-driven"]
 sources: ["source_tp3_enunciado.md", "source_molecular_dynamics_simulation_of_hard_spheres.md", "source_teorica_3.md"]
-last_updated: "2026-04-13"
+last_updated: "2026-04-17"
 ---
 # System 1: Scanning Rate
 
@@ -49,7 +49,7 @@ This is the execution target of the repository. It combines classical event-driv
 
 ## Experimental Protocol
 - Multiple realizations are required for each `N`.
-- Runtime is measured separately at fixed `tf = 5 s`.
+- Runtime is measured separately at fixed `tf = 500 s` (see [errata](source_tp3_enunciado.md#errata-cátedra)).
 - Observables `1.2–1.4` use an adaptive stationary protocol documented in [Analysis: System 1 Experimental Protocol](system_1_experimental_protocol.md).
 - Radial shells use `dS = 0.2 m`.
 - The near-shell convention for the TP-specific `S ≈ 2` analysis is `[2.0, 2.2)`.

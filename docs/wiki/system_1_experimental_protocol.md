@@ -4,7 +4,7 @@ title: "Analysis: System 1 Experimental Protocol"
 summary: "Repository protocol for selecting N, detecting stationarity, defining averages, and handling the near-shell S≈2 analysis."
 tags: ["analysis", "system1", "protocol", "statistics"]
 sources: ["source_tp3_enunciado.md", "source_teorica_0.md", "source_guia_presentaciones.md"]
-last_updated: "2026-04-13"
+last_updated: "2026-04-17"
 ---
 # Analysis: System 1 Experimental Protocol
 
@@ -16,7 +16,7 @@ The statement requires stationary metrics and radial averages, but it does not s
 - Stop extending the staircase after the median runtime for the current `N` exceeds `20 s` per realization.
 
 ## Runtime Study (1.1)
-- Use fixed physical horizon `tf = 5 s`.
+- Use fixed physical horizon `tf = 500 s` (see [errata](source_tp3_enunciado.md#errata-cátedra)).
 - Repeat each `N` five times by default.
 - Report mean and standard deviation of wall-clock runtime.
 
@@ -27,7 +27,7 @@ The statement requires stationary metrics and radial averages, but it does not s
 - Declare stationarity when the absolute difference between the window means is at most `0.02` for `3` consecutive checks.
 - After detecting stationarity, extend the run by `20 s` to measure stationary observables.
 - Safety cutoff:
-  - terminate a realization at `t_max = 200 s`
+  - terminate a realization at `t_max = 2000 s`
   - if stationarity is not reached by then, mark the realization `no_stationary`
 
 ## Averaging Rules

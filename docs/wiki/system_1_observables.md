@@ -4,14 +4,14 @@ title: "Observable: System 1 Measurements"
 summary: "Detailed measurement contract for TP3 points 1.1-1.4, including runtime, scanning rate, stationary used fraction, and radial profiles."
 tags: ["observable", "system1", "statistics"]
 sources: ["source_tp3_enunciado.md", "source_teorica_0.md", "source_guia_presentaciones.md"]
-last_updated: "2026-04-13"
+last_updated: "2026-04-17"
 ---
 # Observable: System 1 Measurements
 
 The repository now supports the full measurement surface required by the statement, not just the raw motor state.
 
 ## 1.1 Runtime vs N
-- Absolute simulation horizon fixed at `tf = 5 s`.
+- Absolute simulation horizon fixed at `tf = 500 s` (see [errata](source_tp3_enunciado.md#errata-cátedra)).
 - Runtime is measured as wall-clock time of the full motor execution, including snapshot writing.
 - Default study policy:
   - `5` repetitions per `N`
