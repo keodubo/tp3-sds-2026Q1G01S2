@@ -52,7 +52,13 @@ def build_parser() -> argparse.ArgumentParser:
     animate_parser = system1_subparsers.add_parser("animate", help="Render a GIF animation from a System 1 snapshot file.")
     animate_parser.add_argument("--input", required=True, type=Path)
     animate_parser.add_argument("--output", required=True, type=Path)
-    animate_parser.add_argument("--fps", type=int, default=12)
+    animate_parser.add_argument("--fps", type=int, default=20)
+    animate_parser.add_argument(
+        "--playback-duration",
+        type=float,
+        default=30.0,
+        help="Playback duration of the GIF in seconds (controls total frame count together with --fps).",
+    )
     animate_parser.add_argument("--show-step-label", action="store_true")
 
     package_parser = system1_subparsers.add_parser("package-delivery", help="Build a compact System 1 delivery zip.")
@@ -190,6 +196,7 @@ def main(argv: list[str] | None = None) -> int:
                 input_path=input_path,
                 output_path=output_path,
                 fps=args.fps,
+                playback_duration=args.playback_duration,
                 show_step_label=args.show_step_label,
             )
             print(f"Wrote animation to {output_path}")
