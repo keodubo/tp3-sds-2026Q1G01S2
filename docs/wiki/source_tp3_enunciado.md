@@ -4,7 +4,7 @@ title: "Source: TP3 Enunciado"
 summary: "Detailed assignment source covering deliverables, System 1 physics, required studies 1.1-1.4, and constraints on the final code package."
 tags: ["source", "tp3", "requirements", "system1"]
 source_path: "docs/raw/TP3_Enunciado.pdf"
-last_updated: "2026-04-13"
+last_updated: "2026-04-17"
 ---
 # Source: TP3 Enunciado
 
@@ -73,6 +73,11 @@ This document is the authoritative contract for the repository. It does not just
 - Simulate for fixed absolute time `tf = 5 s`.
 - Vary `N`.
 - Plot execution time as a function of `N`.
+
+### Errata (cátedra)
+- La cátedra confirmó oralmente que `tf = 5 s` es una errata del PDF.
+- El valor correcto usado en este repositorio y aplicado a las simulaciones 1.1 a 1.4 es `tf = 500 s`.
+- Esta página conserva la cita literal del PDF como referencia histórica; las páginas derivadas ([protocol](system_1_experimental_protocol.md), [observables](system_1_observables.md), [scanning rate](system_1_scanning_rate.md)) trabajan con el valor corregido.
 
 ### Implementation Implication
 - The runtime study must time the real simulation motor, including snapshot generation, not just pure collision stepping.
