@@ -20,6 +20,8 @@ dist/
 
 # Generated project artifacts
 artifacts/
+output_1.*/
+output_gifs/
 
 # Local editor / vault state that is not part of the repo deliverable
 .idea/

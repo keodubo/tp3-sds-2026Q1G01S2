@@ -12,6 +12,7 @@ OUTPUT_ROOT="${OUTPUT_ROOT:-${ROOT_DIR}}"
 
 GIF_FPS="${GIF_FPS:-20}"
 GIF_PLAYBACK_DURATION="${GIF_PLAYBACK_DURATION:-30.0}"
+# GIF_COUNTS is intentionally not an env-var override (bash arrays are not exportable)
 GIF_COUNTS=(50 100 200 400 800)
 
 read_study_meta() {
@@ -39,6 +40,11 @@ mkdir -p "$(dirname "${DELIVERY_ZIP}")"
 cd "${ROOT_DIR}"
 
 mapfile -t STUDY_META < <(read_study_meta)
+if [[ ${#STUDY_META[@]} -lt 2 ]]; then
+  echo "ERROR: read_study_meta returned ${#STUDY_META[@]} line(s); expected 2." >&2
+  echo "       Check STUDY_CONFIG=${STUDY_CONFIG}" >&2
+  exit 1
+fi
 STUDY_ROOT="${STUDY_META[0]}"
 SEED_START="${STUDY_META[1]}"
 
@@ -93,6 +99,6 @@ run_tp3 system1 package-delivery --output "${DELIVERY_ZIP}"
 
 echo
 echo "System 1 delivery pipeline completed."
-echo "Inciso folders: ${OUTPUT_ROOT}/output_1.{1,2,3,4}/"
+echo "Inciso folders: ${OUTPUT_ROOT}/output_1.1/ output_1.2/ output_1.3/ output_1.4/"
 echo "Animations: ${OUTPUT_ROOT}/output_gifs/"
 echo "Delivery zip: ${DELIVERY_ZIP}"
