@@ -1,12 +1,76 @@
 from __future__ import annotations
 
+import bisect
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from tp3_sds.system1.output import ParsedStep, SnapshotHeader, parse_snapshot_output
+from tp3_sds.system1.output import ParsedSnapshotOutput, ParsedStep, SnapshotHeader, parse_snapshot_output
 
 DEFAULT_IMAGE_SIZE = 720
 DEFAULT_MARGIN = 24
+DEFAULT_PLAYBACK_DURATION_SECONDS = 30.0
+
+
+@dataclass(frozen=True)
+class InterpolatedParticle:
+    x: float
+    y: float
+    r: int
+    g: int
+    b: int
+
+
+@dataclass(frozen=True)
+class AnimationFrame:
+    t_frame: float
+    n_used: int
+    particles: list[InterpolatedParticle]
+
+
+def build_animation_frames(
+    *,
+    parsed: ParsedSnapshotOutput,
+    fps: int,
+    playback_duration: float,
+) -> list[AnimationFrame]:
+    """Resample snapshots uniformly in physical time with exact linear interpolation.
+
+    Between two events no particle changes velocity, so `pos(t) = anchor.pos + (t - anchor.time) * anchor.vel` is exact.
+    """
+    if fps <= 0:
+        raise ValueError("fps must be greater than zero.")
+    if playback_duration <= 0:
+        raise ValueError("playback_duration must be greater than zero.")
+    if not parsed.steps:
+        raise ValueError("parsed output must contain at least one step.")
+
+    n_frames = max(1, int(round(fps * playback_duration)))
+    tf = parsed.header.duration
+    dt_physical = tf / n_frames
+    snapshot_times = [step.time for step in parsed.steps]
+    last_snapshot_time = parsed.steps[-1].time
+
+    frames: list[AnimationFrame] = []
+    for i in range(n_frames):
+        t_frame_raw = i * dt_physical
+        t_frame = min(t_frame_raw, last_snapshot_time)
+        k = max(0, bisect.bisect_right(snapshot_times, t_frame) - 1)
+        snap = parsed.steps[k]
+        dt = t_frame - snap.time
+        interpolated = [
+            InterpolatedParticle(
+                x=particle.x + dt * particle.vx,
+                y=particle.y + dt * particle.vy,
+                r=particle.r,
+                g=particle.g,
+                b=particle.b,
+            )
+            for particle in snap.particles
+        ]
+        frames.append(AnimationFrame(t_frame=t_frame, n_used=snap.n_used, particles=interpolated))
+
+    return frames
 
 
 def render_snapshot_animation(

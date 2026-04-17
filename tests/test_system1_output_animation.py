@@ -9,7 +9,19 @@ from textwrap import dedent
 import pytest
 
 from tp3_sds.cli import main
-from tp3_sds.system1.output import parse_output, parse_snapshot_output
+from tp3_sds.system1.animation import (
+    AnimationFrame,
+    InterpolatedParticle,
+    build_animation_frames,
+)
+from tp3_sds.system1.output import (
+    ParsedParticle,
+    ParsedSnapshotOutput,
+    ParsedStep,
+    SnapshotHeader,
+    parse_output,
+    parse_snapshot_output,
+)
 
 
 def test_parse_snapshot_output_reads_header_and_steps(tmp_path: Path) -> None:
@@ -133,3 +145,105 @@ def _sample_snapshot_text() -> str:
         particle id=1 x=-2.500000 y=0.000000 vx=1.000000 vy=0.000000 state=used r=148 g=0 b=211
         """
     )
+
+
+def _make_parsed(*, duration: float, steps: list[ParsedStep]) -> ParsedSnapshotOutput:
+    header = SnapshotHeader(
+        duration=duration,
+        particle_count=len(steps[0].particles) if steps else 0,
+        domain_diameter=80.0,
+        obstacle_radius=1.0,
+        particle_radius=1.0,
+        snapshot_every=1,
+        fresh_color=(0, 255, 0),
+        used_color=(148, 0, 211),
+    )
+    return ParsedSnapshotOutput(header=header, steps=steps)
+
+
+def _p(id_: int, x: float, y: float, vx: float, vy: float) -> ParsedParticle:
+    return ParsedParticle(id=id_, x=x, y=y, vx=vx, vy=vy, state="fresh", r=0, g=255, b=0)
+
+
+def test_build_animation_frames_linear_interpolation_exact() -> None:
+    parsed = _make_parsed(
+        duration=2.0,
+        steps=[
+            ParsedStep(event_id=0, time=0.0, n_used=0, particles=[_p(0, 0.0, 0.0, 1.0, 0.0)]),
+            ParsedStep(event_id=1, time=2.0, n_used=0, particles=[_p(0, 2.0, 0.0, 1.0, 0.0)]),
+        ],
+    )
+    frames = build_animation_frames(parsed=parsed, fps=1, playback_duration=2.0)
+    assert len(frames) == 2
+    assert frames[0].t_frame == 0.0
+    assert frames[0].particles[0].x == 0.0
+    assert frames[1].t_frame == 1.0
+    assert frames[1].particles[0].x == 1.0
+    assert frames[1].particles[0].y == 0.0
+
+
+def test_build_animation_frames_snapshot_boundary_uses_right_anchor() -> None:
+    parsed = _make_parsed(
+        duration=2.0,
+        steps=[
+            ParsedStep(event_id=0, time=0.0, n_used=0, particles=[_p(0, 0.0, 0.0, 1.0, 0.0)]),
+            ParsedStep(event_id=1, time=1.0, n_used=0, particles=[_p(0, 1.0, 0.0, 0.0, 1.0)]),
+            ParsedStep(event_id=2, time=2.0, n_used=0, particles=[_p(0, 1.0, 1.0, 0.0, 1.0)]),
+        ],
+    )
+    frames = build_animation_frames(parsed=parsed, fps=1, playback_duration=2.0)
+    assert frames[1].t_frame == 1.0
+    assert frames[1].particles[0].x == 1.0
+    assert frames[1].particles[0].y == 0.0
+
+
+def test_build_animation_frames_count_equals_fps_times_duration() -> None:
+    parsed = _make_parsed(
+        duration=5.0,
+        steps=[ParsedStep(event_id=0, time=0.0, n_used=0, particles=[_p(0, 0.0, 0.0, 0.0, 0.0)])],
+    )
+    frames = build_animation_frames(parsed=parsed, fps=10, playback_duration=2.0)
+    assert len(frames) == 20
+
+
+def test_build_animation_frames_clamps_past_last_snapshot() -> None:
+    parsed = _make_parsed(
+        duration=5.0,
+        steps=[
+            ParsedStep(event_id=0, time=0.0, n_used=0, particles=[_p(0, 0.0, 0.0, 1.0, 0.0)]),
+            ParsedStep(event_id=1, time=3.0, n_used=0, particles=[_p(0, 3.0, 0.0, 1.0, 0.0)]),
+        ],
+    )
+    frames = build_animation_frames(parsed=parsed, fps=1, playback_duration=5.0)
+    assert len(frames) == 5
+    assert frames[-1].t_frame == 3.0
+    assert frames[-1].particles[0].x == 3.0
+
+
+def test_build_animation_frames_preserves_colors_and_n_used() -> None:
+    used_particle = ParsedParticle(id=0, x=0.0, y=0.0, vx=0.0, vy=0.0, state="used", r=148, g=0, b=211)
+    parsed = _make_parsed(
+        duration=1.0,
+        steps=[ParsedStep(event_id=0, time=0.0, n_used=1, particles=[used_particle])],
+    )
+    frames = build_animation_frames(parsed=parsed, fps=2, playback_duration=1.0)
+    assert frames[0].n_used == 1
+    assert (frames[0].particles[0].r, frames[0].particles[0].g, frames[0].particles[0].b) == (148, 0, 211)
+
+
+def test_build_animation_frames_rejects_non_positive_fps() -> None:
+    parsed = _make_parsed(
+        duration=1.0,
+        steps=[ParsedStep(event_id=0, time=0.0, n_used=0, particles=[_p(0, 0.0, 0.0, 0.0, 0.0)])],
+    )
+    with pytest.raises(ValueError, match="fps"):
+        build_animation_frames(parsed=parsed, fps=0, playback_duration=1.0)
+
+
+def test_build_animation_frames_rejects_non_positive_playback_duration() -> None:
+    parsed = _make_parsed(
+        duration=1.0,
+        steps=[ParsedStep(event_id=0, time=0.0, n_used=0, particles=[_p(0, 0.0, 0.0, 0.0, 0.0)])],
+    )
+    with pytest.raises(ValueError, match="playback_duration"):
+        build_animation_frames(parsed=parsed, fps=10, playback_duration=0.0)
