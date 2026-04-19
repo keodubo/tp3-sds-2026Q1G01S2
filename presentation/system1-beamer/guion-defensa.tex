@@ -1,0 +1,469 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish,es-noshorthands]{babel}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{bm}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{xcolor}
+
+\geometry{margin=2.2cm}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.45em}
+
+\definecolor{tpblue}{RGB}{26,46,138}
+\definecolor{tpyellow}{RGB}{255,215,0}
+\definecolor{tplight}{RGB}{242,245,252}
+\definecolor{tpgray}{RGB}{85,85,85}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=tpblue,
+  urlcolor=tpblue,
+  pdftitle={Guion de defensa - TP3 Sistema 1},
+  pdfauthor={Grupo TP3 SDS}
+}
+
+\newcommand{\sectionbox}[1]{
+  \vspace{0.4em}
+  {\colorbox{tplight}{\parbox{\dimexpr\linewidth-2\fboxsep\relax}{\textbf{\color{tpblue}#1}}}}
+  \vspace{0.35em}
+}
+
+\newcommand{\slideguide}[4]{
+  \subsubsection*{#1}
+  \textbf{Tiempo sugerido:} #2
+  \begin{itemize}
+    \item \textbf{Idea central:} #3
+    \item \textbf{Qu\'e decir:} #4
+  \end{itemize}
+}
+
+\title{\textbf{Guion de defensa y explicaci\'on de implementaci\'on}\\[0.3em]
+\large TP3 - Sistema 1}
+\author{Grupo \texttt{[GXXCSS]} -- completar con nombres reales}
+\date{Versi\'on de apoyo para la defensa oral}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+\section{C\'omo usar este documento}
+
+Este PDF est\'a pensado como material de estudio previo a la defensa, no como texto para leer en voz alta.
+
+\begin{itemize}
+  \item \textbf{Secci\'on \ref{sec:implementacion}:} resume qu\'e hace realmente el c\'odigo y c\'omo explicarlo sin caer en detalles irrelevantes.
+  \item \textbf{Secci\'on \ref{sec:guion}:} propone un recorrido slide por slide alineado con \path{presentation/system1-beamer/deck.tex}.
+  \item \textbf{Secci\'on \ref{sec:preguntas}:} junta preguntas probables del profesor con respuestas cortas y defendibles.
+  \item \textbf{Secci\'on \ref{sec:ia}:} ayuda a responder si preguntan por uso responsable de IA.
+  \item \textbf{Secci\'on \ref{sec:vivo}:} deja una checklist corta para una demo en vivo que s\'i funciona en este checkout.
+\end{itemize}
+
+\sectionbox{Idea fuerza de la defensa}
+
+Si tienen que condensar todo en cuatro mensajes, que sean estos:
+
+\begin{enumerate}
+  \item Implementamos un \textbf{motor dirigido por eventos} porque el problema est\'a definido por colisiones y cambios de estado puntuales, no por un $\Delta t$ fijo.
+  \item Separarmos \textbf{motor}, \textbf{salida textual}, \textbf{animaci\'on} y \textbf{an\'alisis}, para que cada parte tenga un contrato claro.
+  \item Los observables pedidos por el TP no salen ``de una figura'': salen de \textbf{series temporales y perfiles radiales} que el motor preserva y el estudio procesa.
+  \item Las conclusiones que mostramos son \textbf{acotadas al dataset actual}: 2 realizaciones por valor de $N$ en \texttt{artifacts/system1/studies/inciso-1.1}. No conviene sobregeneralizar.
+\end{enumerate}
+
+\section{Guion t\'ecnico: c\'omo lo implementamos}
+\label{sec:implementacion}
+
+\subsection{Modelo f\'isico que pasamos a c\'odigo}
+
+\begin{itemize}
+  \item El sistema es un anillo circular: recinto de di\'ametro $L=80\,\mathrm{m}$, obst\'aculo fijo central de radio $r_0=1\,\mathrm{m}$ y part\'iculas de radio $r=1\,\mathrm{m}$.
+  \item Cada part\'icula tiene posici\'on $(x,y)$, velocidad $(v_x,v_y)$, masa $m=1$ y un estado discreto: \texttt{fresh} o \texttt{used}.
+  \item Todas empiezan frescas. Una fresca pasa a usada al tocar el obst\'aculo. Una usada vuelve a fresca al tocar la pared exterior.
+  \item Entre colisiones el movimiento es bal\'istico: velocidad constante y trayectorias rectas.
+\end{itemize}
+
+\textbf{Frase defendible:} ``Tomamos el modelo matem\'atico del enunciado y lo representamos con una part\'icula por registro, una geometr\'ia fija compartida y tres tipos de eventos: choque entre part\'iculas, choque con la pared y choque con el obst\'aculo.''
+
+\subsection{Por qu\'e usamos simulaci\'on dirigida por eventos}
+
+\begin{itemize}
+  \item Un esquema con $\Delta t$ fijo obliga a elegir un paso artificial y puede saltearse colisiones o volver cara la simulaci\'on si el paso es muy chico.
+  \item En este problema los cambios relevantes ocurren exactamente en los tiempos de colisi\'on.
+  \item Por eso el motor predice cu\'al es el siguiente evento, avanza el sistema hasta ese tiempo y reci\'en ah\'i modifica el estado.
+\end{itemize}
+
+\textbf{Frase defendible:} ``No discretizamos el tiempo; discretizamos los eventos. Eso nos deja trabajar en tiempos f\'isicos de colisi\'on y evita introducir un par\'ametro num\'erico que el enunciado no pide.''
+
+\subsection{Inicializaci\'on de part\'iculas}
+
+\begin{itemize}
+  \item La inicializaci\'on principal intenta ubicar part\'iculas al azar por rechazo dentro de la regi\'on accesible, evitando solapamientos.
+  \item Si esa estrategia falla por densidad o por cantidad de intentos, hay una estrategia de respaldo que arma posiciones candidatas sobre anillos internos y luego las mezcla aleatoriamente.
+  \item Las direcciones iniciales de velocidad se toman uniformes en $[0,2\pi)$ y el m\'odulo vale $v_0=1\,\mathrm{m/s}$.
+\end{itemize}
+
+\textbf{Qu\'e muestra que entendemos el c\'odigo:} la inicializaci\'on no asume que el rechazo aleatorio siempre alcanza; tiene un fallback expl\'icito para no romperse cuando el espacio libre se vuelve m\'as dif\'icil.
+
+\subsection{Predicci\'on de colisiones}
+
+\begin{itemize}
+  \item \textbf{Part\'icula-part\'icula:} resolvemos la ecuaci\'on cuadr\'atica de contacto entre centros y elegimos la primera ra\'iz positiva f\'isicamente v\'alida.
+  \item \textbf{Part\'icula-pared exterior:} resolvemos cu\'ando la trayectoria bal\'istica intersecta el radio de viaje exterior.
+  \item \textbf{Part\'icula-obst\'aculo:} hacemos lo mismo para el radio de viaje interior.
+  \item En los choques con fronteras circulares no alcanza con encontrar una ra\'iz positiva: tambi\'en hay que verificar que corresponda al sentido f\'isico correcto, hacia afuera para pared y hacia adentro para obst\'aculo.
+\end{itemize}
+
+\textbf{Frase defendible:} ``La predicci\'on no es aproximada por frames; sale de resolver las condiciones geom\'etricas de contacto.''
+
+\subsection{Cola priorizada e invalidaci\'on diferida}
+
+\begin{itemize}
+  \item Los eventos futuros se guardan en un \texttt{heap}, ordenados por tiempo.
+  \item Cada evento guarda el tiempo predicho y los contadores de colisi\'on de las part\'iculas involucradas al momento de programarlo.
+  \item Si una de esas part\'iculas choca antes por otro motivo, el evento viejo queda obsoleto.
+  \item No intentamos borrar esos eventos obsoletos dentro del heap. Los dejamos y los descartamos cuando salen a la cima. Eso es invalidaci\'on diferida.
+\end{itemize}
+
+\textbf{Por qu\'e importa:} evita tener que reconstruir toda la cola despu\'es de cada choque y mantiene el algoritmo simple.
+
+\subsection{Resoluci\'on de eventos}
+
+\begin{itemize}
+  \item \textbf{Choque part\'icula-part\'icula:} resolvemos un choque el\'astico que conserva cantidad de movimiento y energ\'ia cin\'etica del modelo.
+  \item \textbf{Choque con pared u obst\'aculo:} reflejamos la velocidad respecto de la normal local.
+  \item Encima de la colisi\'on geom\'etrica agregamos la l\'ogica de estado:
+    \begin{itemize}
+      \item obst\'aculo: si la part\'icula estaba fresca, se registra un contacto fresca $\rightarrow$ usada y luego queda usada;
+      \item pared exterior: si estaba usada, vuelve a fresca.
+    \end{itemize}
+  \item Despu\'es de cada evento solo se recalculan los futuros choques de las part\'iculas afectadas.
+\end{itemize}
+
+\textbf{Frase defendible:} ``La din\'amica mec\'anica y la din\'amica de estados est\'an superpuestas: primero existe el choque f\'isico, y sobre ese choque el problema define un cambio l\'ogico.''
+
+\subsection{Observables que guarda el motor}
+
+\begin{itemize}
+  \item \textbf{$C_{fc}(t)$:} cada vez que una part\'icula fresca toca el obst\'aculo, se incrementa el contador acumulado.
+  \item \textbf{$F_u(t)$:} en cada snapshot contamos cu\'antas part\'iculas usadas hay y dividimos por $N$.
+  \item \textbf{Perfiles radiales:} en cada snapshot se recorren solo part\'iculas frescas con $\bm R\cdot\bm v<0$, se las binea por radio y se acumulan densidad y velocidad normal.
+\end{itemize}
+
+Esto es importante para defenderse de preguntas del tipo ``\emph{\`Ese gr\'afico lo armaron afuera o sale del simulador?}''. La respuesta correcta es: \textbf{el motor preserva la informaci\'on cruda y el pipeline de estudio la agrega despu\'es}.
+
+\subsection{Por qu\'e el archivo de salida incluye color}
+
+\begin{itemize}
+  \item El enunciado pide que la salida textual del motor imprima color.
+  \item Por eso el \texttt{.txt} exporta no solo posici\'on, velocidad y estado, sino tambi\'en el RGB asociado.
+  \item Eso desacopla la animaci\'on del simulador: cualquier renderer externo puede colorear sin reimplementar la l\'ogica de estados.
+\end{itemize}
+
+\textbf{Frase defendible:} ``Color no es una decoraci\'on del GIF; es parte del contrato de salida pedido por el TP.''
+
+\subsection{C\'omo se arma el estudio 1.1--1.4}
+
+\begin{itemize}
+  \item \texttt{tp3 system1 run} corre una realizaci\'on individual y escribe snapshots.
+  \item \texttt{tp3 system1 animate} toma ese \texttt{.txt} y genera un GIF independiente.
+  \item \texttt{tp3 system1 study} corre varias realizaciones por valor de $N$, guarda series crudas, agrega CSVs y genera figuras.
+  \item \texttt{tp3 system1 package-delivery} arma un zip chico con solo el motor, como pide la entrega.
+\end{itemize}
+
+\textbf{Punto fino para la defensa:} el deck actual usa como fuente de verdad \path{artifacts/system1/studies/inciso-1.1}, mientras que el config de ejemplo del repo sirve para demo y verificaci\'on r\'apida.
+
+\subsection{C\'omo calculamos cada observable}
+
+\sectionbox{Inciso 1.1}
+\begin{itemize}
+  \item Medimos tiempo de pared real del motor completo a horizonte f\'isico fijo $t_f=500\,\mathrm{s}$.
+  \item El tiempo reportado incluye tambi\'en la escritura de snapshots.
+\end{itemize}
+
+\sectionbox{Inciso 1.2}
+\begin{itemize}
+  \item Para cada realizaci\'on preservamos toda la serie $C_{fc}(t)$.
+  \item Ajustamos una recta por OLS en tiempo f\'isico.
+  \item La pendiente de esa recta es $J$.
+\end{itemize}
+
+\sectionbox{Inciso 1.3}
+\begin{itemize}
+  \item Tomamos la historia de $F_u(t)$ en snapshots irregulares.
+  \item La remuestreamos con retenci\'on de orden cero usando $\Delta t = 0.5\,\mathrm{s}$.
+  \item Declaramos estacionario si la diferencia entre medias de dos ventanas consecutivas de $10\,\mathrm{s}$ es menor o igual a $0.02$, repetido en 3 chequeos.
+  \item Una vez detectado, corremos $20\,\mathrm{s}$ m\'as para medir $F_{est}$.
+\end{itemize}
+
+\sectionbox{Inciso 1.4}
+\begin{itemize}
+  \item Las capas tienen ancho fijo $dS=0.2\,\mathrm{m}$.
+  \item Solo contamos part\'iculas frescas entrantes, o sea con $\bm R\cdot\bm v<0$.
+  \item La densidad se promedia sobre tiempos post-estacionarios.
+  \item La velocidad normal se promedia solo cuando hay part\'iculas v\'alidas en la capa, sin inventar ceros.
+  \item El flujo se define como $J_{in}(S)=\langle \rho_f^{in}\rangle(S)\,|\langle v_f^{in}\rangle(S)|$.
+\end{itemize}
+
+\subsection{Limitaciones que conviene reconocer antes de que las marquen}
+
+\begin{itemize}
+  \item El dataset que estamos presentando tiene \textbf{2 realizaciones por valor de $N$}. Alcanza para mostrar tendencias gruesas, no para hacer afirmaciones finas.
+  \item El tiempo al estacionario aparece siempre en $59\,\mathrm{s}$ \textbf{en esta base de datos y con este protocolo}. No debe venderse como ley universal del sistema.
+  \item El motor no modela de manera expl\'icita colisiones perfectamente simult\'aneas de tres o m\'as part\'iculas.
+  \item El crecimiento del runtime en $N$ es muy fuerte; por eso no conviene improvisar una corrida pesada en vivo.
+\end{itemize}
+
+\subsection{Frases a evitar}
+
+\begin{itemize}
+  \item ``Hay m\'as vecinos'' si no lo respaldan con una m\'etrica espec\'ifica de vecindad.
+  \item ``El sistema se ordena'' o ``se congestiona'' si no muestran un observable que mida eso.
+  \item ``La tasa de escaneo aumenta con $N$'' a secas, porque en los datos mostrados sube hasta $N=750$ y luego baja en $N=1000$.
+  \item ``Llega siempre a estacionario en 59 s'' como afirmaci\'on universal.
+  \item ``El gr\'afico demuestra causalidad'' cuando en realidad solo muestra correlaci\'on o tendencia descriptiva.
+\end{itemize}
+
+\section{Guion de la presentaci\'on}
+\label{sec:guion}
+
+\subsection{Ruta sugerida para 13 minutos}
+
+La estrategia recomendada es:
+
+\begin{enumerate}
+  \item Introducci\'on muy corta.
+  \item Implementaci\'on fuerte y clara.
+  \item Definici\'on de observables sin saltear la parte matem\'atica.
+  \item Resultados con lectura directa de cada figura.
+  \item Conclusiones sobrias y ligadas a las diapositivas mostradas.
+\end{enumerate}
+
+\subsection{Slide por slide}
+
+\slideguide{Portada}{15--20 s}{Decir qu\'e sistema resolvieron y qu\'e van a mostrar.}{``Vamos a presentar el Sistema 1 del TP3: un motor dirigido por eventos para part\'iculas r\'igidas en un recinto circular con obst\'aculo central, junto con el estudio pedido en los incisos 1.1 a 1.4.''}
+
+\slideguide{Objetivo y motivaci\'on}{35--40 s}{Justificar la elecci\'on del enfoque y qu\'e observables interesan.}{``Nuestro objetivo fue pasar el modelo del enunciado a un simulador event-driven y medir c\'omo esa din\'amica microsc\'opica se refleja en observables macrosc\'opicos como la tasa de escaneo, la fracci\'on usada estacionaria y los perfiles radiales.''}
+
+\slideguide{Sistema f\'isico y reglas del modelo}{45--55 s}{Dejar fija la geometr\'ia y la m\'aquina de estados.}{``El sistema es un anillo: pared circular exterior, obst\'aculo fijo central y part\'iculas de radio y masa unidad. Todas empiezan frescas; tocar el obst\'aculo las vuelve usadas y tocar la pared exterior las vuelve a frescas.''}
+
+\slideguide{Representaci\'on computacional del modelo}{40--50 s}{Mostrar que hay una traducci\'on limpia entre modelo y software.}{``En c\'odigo cada part\'icula guarda posici\'on, velocidad y estado. A partir de ese estado predecimos choques futuros, los ordenamos en una cola priorizada, resolvemos el siguiente evento y registramos observables.''}
+
+\slideguide{Algoritmo dirigido por eventos y colisiones}{60--75 s}{Explicar el loop can\'onico.}{``El motor no avanza por frames. Extrae el pr\'oximo evento v\'alido, mueve todo el sistema exactamente hasta ese tiempo, resuelve la colisi\'on y vuelve a programar solo los eventos afectados. Para manejar eventos viejos usamos invalidaci\'on diferida sobre la cola.''}
+
+\slideguide{Traducci\'on del modelo a c\'odigo}{45--55 s}{Dar el detalle matem\'atico m\'inimo que muestra entendimiento.}{``Los tiempos de choque salen de ecuaciones de contacto. En part\'icula-part\'icula resolvemos la primera ra\'iz positiva de la cuadr\'atica; en pared y obst\'aculo resolvemos la intersecci\'on con la frontera circular y validamos el sentido f\'isico del choque.''}
+
+\slideguide{Par\'ametros del estudio}{45--55 s}{Separar claramente configuraci\'on fija y variable.}{``Para el estudio fijamos geometr\'ia y protocolo, variamos $N$ y repetimos realizaciones. Para 1.3 y 1.4 remuestreamos $F_u(t)$ con $\Delta t = 0.5\,\mathrm{s}$, detectamos estacionario por ventanas y extendemos 20 s para medir observables estacionarios.''}
+
+\slideguide{Visualizaci\'on de la corrida}{25--35 s}{Usar la animaci\'on como apoyo, no como relleno.}{``La animaci\'on sale del mismo archivo textual del motor. Verde representa fresca, violeta representa usada. Esto nos sirve para corroborar visualmente la din\'amica, pero las conclusiones cuantitativas salen de las series y perfiles agregados.''}
+
+\slideguide{Definici\'on de observables}{60--75 s}{Tomarse el tiempo para que el resto de las figuras se entiendan.}{``Definimos $C_{fc}(t)$ como los contactos acumulados fresca a usada; la pendiente de su ajuste lineal nos da $J$. Para la fracci\'on usada usamos $F_u(t)=N_u(t)/N$ y medimos tanto el tiempo al estacionario como su promedio estacionario. Para perfiles radiales filtramos solo part\'iculas frescas entrantes.''}
+
+\slideguide{1.1 Tiempo de ejecuci\'on vs $N$}{40--50 s}{Leer tendencia y magnitudes.}{``El costo computacional crece muy fuerte con $N$. En esta base de datos pasamos de alrededor de 4.61 s en $N=250$ a casi 1980 s en $N=1000$, con dispersi\'on mayor en los reg\'imenes m\'as densos.''}
+
+\slideguide{1.2 Evoluciones t\'ipicas de $C_{fc}(t)$}{35--45 s}{Mostrar c\'omo se obtiene $J$ a nivel realizaci\'on.}{``Estas dos corridas representativas muestran que el observable base es una serie acumulada. El ajuste lineal sobre toda la serie nos da una pendiente y esa pendiente es la tasa de escaneo de esa realizaci\'on.''}
+
+\slideguide{1.2 Tasa de escaneo promedio}{40--50 s}{Evitar vender monotonicidad que no est\'a.}{``Al promediar por $N$ vemos que $J$ no resulta mon\'otona en esta grilla: aumenta hasta un m\'aximo medido en $N=750$ y luego cae en $N=1000$. Esa es la lectura segura de estos datos.''}
+
+\slideguide{1.3 Evoluciones t\'ipicas de $F_u(t)$}{35--45 s}{Conectar el observable con el protocolo estacionario.}{``La l\'inea vertical punteada marca el instante en que el protocolo detecta estacionario; la horizontal marca el promedio post-estacionario. No tomamos ese valor a ojo: sale de una regla fija aplicada a todas las realizaciones.''}
+
+\slideguide{1.3 M\'etricas estacionarias}{40--50 s}{Marcar alcance y l\'imite del dataset.}{``En esta base de datos el tiempo detectado al estacionario es 59 s para todas las realizaciones. Adem\'as, $F_{est}$ alcanza su mayor valor medido en $N=100$ y luego decrece para $N$ m\'as grandes.''}
+
+\slideguide{1.4 Perfil radial representativo}{35--45 s}{Explicar qu\'e se est\'a promediando.}{``Ac\'a vemos, para un $N$ representativo, la densidad de part\'iculas frescas entrantes, su velocidad normal media y el flujo derivado, todos promediados en el r\'egimen post-estacionario.''}
+
+\slideguide{1.4 Capa cercana a $S \approx 2$}{40--50 s}{Leer solo lo que el gr\'afico habilita.}{``Al mirar la primera capa accesible, $[2.0,2.2)$, no observamos se\~nal medible para $N=10$ y $N=50$. A partir de $N=100$ aparecen densidad, velocidad y flujo distintos de cero, con un m\'aximo medido en $N=750$.''}
+
+\slideguide{Conclusiones generales}{45--55 s}{Cerrar con dos o tres mensajes fuertes.}{``La primera conclusi\'on es computacional: el costo crece muy fuerte con $N$. La segunda es f\'isica: la tasa de escaneo y la fracci\'on usada estacionaria no muestran una respuesta mon\'otona simple en toda la grilla. La tercera es metodol\'ogica: el mismo motor sirvi\'o para generar snapshots, animaciones, series y perfiles.''}
+
+\slideguide{Conclusiones sobre la zona pr\'oxima al obst\'aculo}{30--40 s}{Cerrar sin sobregeneralizar.}{``En la primera capa accesible, las magnitudes cerca del obst\'aculo solo aparecen a partir de cierto tama\~no del sistema y el mayor flujo medido en esta grilla ocurre en $N=750$. Dado que trabajamos con dos realizaciones por $N$, tomamos esto como tendencia observada y no como ley definitiva.''}
+
+\subsection{Plan B si los cortan de tiempo}
+
+Si los apuran, prioricen en este orden:
+
+\begin{enumerate}
+  \item Objetivo y sistema f\'isico.
+  \item Dos slides de implementaci\'on: algoritmo + traducci\'on a c\'odigo.
+  \item Definici\'on de observables.
+  \item Runtime vs $N$.
+  \item Tasa de escaneo promedio.
+  \item M\'etricas estacionarias.
+  \item Capa cercana a $S \approx 2$.
+  \item Conclusiones.
+\end{enumerate}
+
+\section{Preguntas y respuestas posibles}
+\label{sec:preguntas}
+
+\subsection{Implementaci\'on del motor}
+
+\textbf{1. \textquestiondown Por qu\'e eligieron simulaci\'on dirigida por eventos y no un $\Delta t$ fijo?}\\
+Porque el modelo cambia solo en colisiones. Un $\Delta t$ fijo introduce un par\'ametro num\'erico artificial y obliga a balancear costo contra precisi\'on. Con event-driven avanzamos exactamente a tiempos de choque.
+
+\textbf{2. \textquestiondown Qu\'e guarda exactamente un evento?}\\
+Guarda el tiempo predicho, el tipo de evento, las part\'iculas involucradas y el contador de colisiones de esas part\'iculas al momento de programarlo. Eso permite decidir luego si el evento sigue siendo v\'alido.
+
+\textbf{3. \textquestiondown Qu\'e es invalidaci\'on diferida?}\\
+Es dejar eventos viejos dentro del heap y descartarlos cuando salen a la cima si alguno de sus contadores ya no coincide. Es m\'as simple que intentar borrar eventos arbitrarios adentro de la cola.
+
+\textbf{4. \textquestiondown Por qu\'e recalculan solo choques de part\'iculas afectadas?}\\
+Porque solo esas part\'iculas cambiaron velocidad o estado. El resto del sistema sigue con la misma trayectoria bal\'istica prevista, as\'i que no hace falta recomputar todo el futuro.
+
+\textbf{5. \textquestiondown C\'omo calculan el choque con la pared o con el obst\'aculo?}\\
+Resolviendo cu\'ando la trayectoria $\bm r + \bm v t$ llega al radio de viaje correspondiente. Luego se filtra la ra\'iz para quedarse con la que representa realmente un impacto hacia la frontera adecuada.
+
+\textbf{6. \textquestiondown Qu\'e pasa si la inicializaci\'on aleatoria por rechazo falla?}\\
+El motor cae a una inicializaci\'on de respaldo sobre anillos, con posiciones candidatas distribuidas en la regi\'on accesible y luego mezcladas aleatoriamente. Eso evita fallos por densidad o mala suerte del rechazo.
+
+\textbf{7. \textquestiondown El color por qu\'e sale del simulador y no del GIF?}\\
+Porque el enunciado pide color en la salida textual. El GIF es un consumidor de esa salida, no la fuente de verdad del estado.
+
+\textbf{8. \textquestiondown Qu\'e no modela este motor?}\\
+No modela expl\'icitamente colisiones perfectamente simult\'aneas de tres o m\'as part\'iculas. El esquema supone colisiones instant\'aneas tratadas de a un evento por vez.
+
+\subsection{An\'alisis y resultados}
+
+\textbf{9. \textquestiondown C\'omo calcularon la tasa de escaneo $J$?}\\
+Para cada realizaci\'on guardamos toda la serie $C_{fc}(t)$ y ajustamos una recta por OLS en tiempo f\'isico. La pendiente del ajuste es $J$.
+
+\textbf{10. \textquestiondown Por qu\'e usan todo $C_{fc}(t)$ y no solo el final?}\\
+Porque el enunciado pide ajustar una recta a la evoluci\'on temporal. Usar toda la serie aprovecha la informaci\'on de la trayectoria completa del observable, no solo un punto final.
+
+\textbf{11. \textquestiondown C\'omo detectan estacionario en $F_u(t)$?}\\
+Remuestreamos la serie con retenci\'on de orden cero en una grilla uniforme de $0.5\,\mathrm{s}$. Comparamos medias de dos ventanas consecutivas de $10\,\mathrm{s}$ y pedimos tres chequeos consecutivos con diferencia menor o igual a $0.02$.
+
+\textbf{12. \textquestiondown Por qu\'e en su dataset el tiempo estacionario vale 59 s para todos los $N$?}\\
+La respuesta segura es: eso es lo que dio esta base de datos con este protocolo de detecci\'on. No lo presentamos como una propiedad universal del sistema, sino como resultado de las realizaciones mostradas.
+
+\textbf{13. \textquestiondown Por qu\'e solo dos realizaciones por $N$?}\\
+Porque esta presentaci\'on se construy\'o sobre la base de datos ya generada en \path{artifacts/system1/studies/inciso-1.1}. Sirve para exhibir el pipeline y tendencias gruesas, pero reconocemos que un estudio final m\'as robusto deber\'ia aumentar repeticiones.
+
+\textbf{14. \textquestiondown Por qu\'e la capa ``cerca de $S=2$'' la fijaron en $[2.0,2.2)$?}\\
+Porque el ancho de capa es $dS=0.2\,\mathrm{m}$ y el primer radio accesible para el centro de una part\'icula es $r_0+r=2\,\mathrm{m}$. Entonces la primera capa accesible es precisamente $[2.0,2.2)$.
+
+\textbf{15. \textquestiondown Por qu\'e promedian densidad y velocidad de manera distinta?}\\
+Porque son magnitudes distintas. La densidad s\'i puede contribuir con cero cuando una capa queda vac\'ia. En cambio, para la velocidad normal no tiene sentido meter ceros artificiales cuando no hubo part\'iculas v\'alidas; solo se promedia sobre muestras reales.
+
+\textbf{16. \textquestiondown Por qu\'e en los gr\'aficos de la presentaci\'on no unieron los puntos con l\'ineas?}\\
+Porque esos plots son un barrido sobre valores discretos de $N$. La l\'inea puede sugerir una interpolaci\'on continua o una tendencia m\'as fuerte de la que realmente se midi\'o. Para la presentaci\'on preferimos marcadores y barras de error.
+
+\textbf{17. \textquestiondown Qu\'e conclusi\'on fuerte s\'i pueden sostener con estos datos?}\\
+Que el runtime crece muy fuerte con $N$, que la tasa de escaneo no es mon\'otona en la grilla mostrada y que cerca del obst\'aculo no hay se\~nal medible para los $N$ m\'as chicos de esta base.
+
+\textbf{18. \textquestiondown Qu\'e conclusi\'on no deber\'ian sostener?}\\
+No conviene afirmar mecanismos causales que no midieron, por ejemplo ``hay m\'as vecinos'' o ``aparece orden colectivo'', porque no hay un observable en esta presentaci\'on que lo pruebe.
+
+\subsection{Uso responsable de IA y validaci\'on}
+
+\textbf{19. \textquestiondown Usaron IA?}\\
+Una respuesta responsable es: ``S\'i, como asistencia para acelerar escritura y organizaci\'on, pero no como caja negra. Validamos el modelo contra el enunciado y la wiki del repo, revisamos el c\'odigo cr\'itico del motor, y podemos explicar c\'omo se calcula cada choque, cada observable y cada figura.'' 
+
+\textbf{20. \textquestiondown C\'omo demuestran que entendieron lo que hace el simulador?}\\
+Mostrando que pueden explicar el loop event-driven, c\'omo se validan eventos obsoletos, c\'omo se calcula $J$, c\'omo se detecta estacionario y ejecutando una corrida corta en vivo si hace falta.
+
+\textbf{21. \textquestiondown C\'omo saben que el resultado no est\'a ``inventado'' por la IA?}\\
+Porque las salidas se contrastaron con los contratos del repo: comandos reales, snapshots reales, CSVs agregados y figuras generadas a partir de esos datos. Adem\'as, los puntos cr\'iticos del algoritmo quedan verificables leyendo el c\'odigo y ejecutando ejemplos peque\~nos.
+
+\textbf{22. \textquestiondown Si yo les cambio un par\'ametro en vivo, qu\'e deber\'ian poder anticipar?}\\
+Deber\'ian poder anticipar al menos efectos cualitativos: cambiar $N$ impacta el n\'umero de colisiones y el runtime; cambiar \texttt{snapshot\_every} afecta la cantidad de snapshots y el peso de salida; cambiar el horizonte temporal afecta cu\'anto observable acumulado se registra.
+
+\textbf{23. \textquestiondown Qu\'e parte del trabajo fue m\'as importante validar?}\\
+La predicci\'on y resoluci\'on de choques, porque de eso depende todo lo dem\'as. Despu\'es, la definici\'on exacta de observables y el protocolo estacionario, porque son los que transforman la simulaci\'on en resultados medibles.
+
+\section{Uso responsable de IA}
+\label{sec:ia}
+
+Si el profesor pregunta expl\'icitamente por IA, conviene responder sin ponerse a la defensiva y sin fingir que no se us\'o.
+
+\sectionbox{Respuesta corta sugerida}
+
+``Usamos IA como herramienta de asistencia, pero no delegamos la comprensi\'on del problema. Lo que validamos manualmente fue: el modelo f\'isico del enunciado, la traducci\'on a simulaci\'on dirigida por eventos, la definici\'on de los observables, el protocolo estacionario y la ejecuci\'on real del simulador. Por eso podemos explicar qu\'e hace cada parte y correr una simulaci\'on corta si hace falta.'' 
+
+\sectionbox{Qu\'e evidencia concreta pueden mencionar}
+
+\begin{itemize}
+  \item El repo tiene una wiki local que fija el contrato del sistema, los observables y el protocolo experimental.
+  \item Los comandos del CLI existen y se pueden ejecutar: \texttt{run}, \texttt{animate}, \texttt{study}, \texttt{package-delivery}.
+  \item La presentaci\'on no sale de texto inventado: sale de los CSVs y series guardados bajo \path{artifacts/system1/studies/inciso-1.1}.
+  \item Pueden explicar c\'omo se obtiene un tiempo de choque, c\'omo se invalida un evento viejo y c\'omo se calcula el promedio estacionario.
+\end{itemize}
+
+\sectionbox{Qu\'e no conviene responder}
+
+\begin{itemize}
+  \item ``La IA hizo el c\'odigo y nosotros despu\'es lo probamos.''
+  \item ``No sabemos exactamente por qu\'e funciona pero da bien.''
+  \item ``Lo importante es el resultado, no tanto el proceso.''
+\end{itemize}
+
+\section{Checklist para una demostraci\'on en vivo}
+\label{sec:vivo}
+
+\subsection{Secuencia recomendada}
+
+La demo m\'as segura no es correr un \texttt{study} pesado. Lo recomendable es:
+
+\begin{enumerate}
+  \item validar config,
+  \item correr una simulaci\'on corta ya configurada,
+  \item si lo piden, animar ese archivo textual.
+\end{enumerate}
+
+\subsection{Comandos}
+
+Ejecutar desde la ra\'iz del repo:
+
+\begin{verbatim}
+PYTHONPATH=src python3 -m tp3_sds system1 validate-config \
+  --config configs/system1.example.toml
+
+PYTHONPATH=src python3 -m tp3_sds system1 run \
+  --config configs/system1.example.toml
+
+PYTHONPATH=src python3 -m tp3_sds system1 animate \
+  --input artifacts/system1/example_run.txt \
+  --output artifacts/system1/example_run.gif \
+  --fps 20 \
+  --playback-duration 8
+\end{verbatim}
+
+\subsection{Qu\'e deber\'ian poder comentar si corre bien}
+
+\begin{itemize}
+  \item Se genera un \texttt{.txt} autocontenido con header, snapshots y part\'iculas.
+  \item El CLI informa eventos procesados, cantidad de snapshots y scanning count.
+  \item La animaci\'on se construye a partir del \texttt{.txt}, no desde un renderer acoplado al motor.
+\end{itemize}
+
+\subsection{Qu\'e no conviene hacer en vivo}
+
+\begin{itemize}
+  \item Correr un \texttt{study} con $N$ grandes.
+  \item Compilar la presentaci\'on delante del profesor.
+  \item Cambiar c\'odigo sobre la marcha.
+\end{itemize}
+
+\section{Checklist final antes de exponer}
+
+\begin{itemize}
+  \item Reemplazar placeholders de portada en el deck.
+  \item Tener a mano el PDF de la presentaci\'on y este PDF de guion.
+  \item Decidir qui\'en explica implementaci\'on, qui\'en explica resultados y qui\'en absorbe preguntas t\'ecnicas.
+  \item Acordar una respuesta consistente sobre uso responsable de IA.
+  \item Practicar una versi\'on de 11 minutos y una versi\'on de 13 minutos.
+  \item Tener abierta una terminal ya ubicada en la ra\'iz del repo.
+\end{itemize}
+
+\sectionbox{Cierre recomendado}
+
+La defensa tiene que dar esta impresi\'on: \textbf{el grupo entiende el motor, entiende el an\'alisis y sabe qu\'e parte de lo que muestra est\'a firmemente respaldada por datos y cu\'al parte necesita m\'as repeticiones para ser una conclusi\'on fuerte.}
+
+\end{document}

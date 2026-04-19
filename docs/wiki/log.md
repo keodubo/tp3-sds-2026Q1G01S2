@@ -3,7 +3,7 @@ type: "administration"
 title: "Wiki Log"
 summary: "Chronological record of wiki operations."
 tags: ["administration", "log"]
-last_updated: "2026-04-13"
+last_updated: "2026-04-19"
 ---
 # Wiki Log
 
@@ -49,3 +49,8 @@ Chronological record of knowledge ingestion and synthesis operations.
 - Executed `tp3 system1 study --config /Users/keoni/Claude-Workspace/projects/tp3-sds-2026Q1G01S2/configs/system1.study.example.toml`.
 - Study root: `/Users/keoni/Claude-Workspace/projects/tp3-sds-2026Q1G01S2/artifacts/system1/studies/example-study`.
 - Particle counts: [8, 12].
+
+## [2026-04-19] run | System 1 simulation
+- Executed `tp3 system1 run --config /Users/keoni/Claude-Workspace/projects/tp3-sds-2026Q1G01S2/configs/system1.example.toml`.
+- Generated output: `/Users/keoni/Claude-Workspace/projects/tp3-sds-2026Q1G01S2/artifacts/system1/example_run.txt`.
+- Processed events: 140.
