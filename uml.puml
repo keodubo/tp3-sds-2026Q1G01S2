@@ -1,0 +1,184 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+
+package "tp3_sds.system1.model" {
+  enum ParticleState {
+    FRESH
+    USED
+  }
+
+  class Geometry {
+    +diameter: float
+    +obstacle_radius: float
+    +particle_radius: float
+    +outer_radius
+    +inner_travel_radius
+    +outer_travel_radius
+  }
+
+  class Particle {
+    +id: int
+    +x: float
+    +y: float
+    +vx: float
+    +vy: float
+    +radius: float
+    +mass: float
+    +state: ParticleState
+    +collision_count: int
+    +advance(dt)
+    +distance_to_origin()
+    +radial_velocity()
+  }
+}
+
+package "tp3_sds.system1.events" {
+  enum EventKind {
+    PARTICLE
+    OUTER_WALL
+    INNER_OBSTACLE
+    STOP
+  }
+
+  class Event {
+    +time: float
+    +sequence: int
+    +kind: EventKind
+    +particle_a: int
+    +particle_b: int
+    +count_a: int
+    +count_b: int
+    +is_valid(particles)
+  }
+}
+
+package "tp3_sds.system1.config" {
+  class ParticleConfig {
+    +count: int
+    +mass: float
+    +speed: float
+  }
+
+  class OutputConfig {
+    +path: Path
+    +snapshot_every: int
+    +fresh_color: tuple
+    +used_color: tuple
+  }
+
+  class ObservableConfig {
+    +radial_bin_width: float
+  }
+
+  class SimulationConfig {
+    +geometry: Geometry
+    +particles: ParticleConfig
+    +output: OutputConfig
+    +observables: ObservableConfig
+    +duration: float
+    +seed: int
+    +max_events: int
+  }
+}
+
+package "tp3_sds.system1.observables" {
+  class RadialProfileSnapshot {
+    +time: float
+    +densities: tuple
+    +normal_velocities: tuple
+    +valid_counts: tuple
+  }
+
+  class RadialProfileBin {
+    +radius_start: float
+    +radius_end: float
+    +density: float
+    +normal_velocity: float
+    +inward_flux: float
+  }
+
+  class System1Observables {
+    +bin_count: int
+    +center_contact_series: list
+    +scanning_count: int
+    +used_fraction_history: list
+    +radial_profile_samples: list
+    +note_center_contact(time, was_fresh)
+    +record_snapshot(time, particles)
+    +export_radial_profiles(time_min)
+  }
+}
+
+package "tp3_sds.system1.output" {
+  class SnapshotWriter {
+    +handle: TextIO
+    +config: SimulationConfig
+    +write_header()
+    +write_step(event_id, time, particles)
+  }
+
+  class SnapshotHeader {
+    +duration: float
+    +particle_count: int
+    +domain_diameter: float
+    +obstacle_radius: float
+    +particle_radius: float
+    +snapshot_every: int
+  }
+}
+
+package "tp3_sds.system1.simulation" {
+  class SimulationResult {
+    +output_path: Path
+    +processed_events: int
+    +snapshots_written: int
+    +final_time: float
+    +scanning_count: int
+    +final_particles: list
+  }
+
+  class SimulationEngine {
+    +config: SimulationConfig
+    +writer: SnapshotWriter
+    +observables: System1Observables
+    +particles: list[Particle]
+    +current_time: float
+    +processed_events: int
+    +snapshots_written: int
+    +run_until(target_time)
+    +finalize(force_final_snapshot)
+  }
+}
+
+Particle --> ParticleState
+Event --> EventKind
+
+SimulationConfig --> Geometry
+SimulationConfig --> ParticleConfig
+SimulationConfig --> OutputConfig
+SimulationConfig --> ObservableConfig
+
+SimulationEngine --> SimulationConfig
+SimulationEngine --> Event : queue
+SimulationEngine --> Particle : updates
+SimulationEngine --> System1Observables
+SimulationEngine --> SnapshotWriter
+SimulationEngine --> SimulationResult
+
+Event ..> Particle : validates
+
+System1Observables --> Geometry
+System1Observables --> Particle
+System1Observables --> RadialProfileSnapshot
+System1Observables --> RadialProfileBin
+
+SnapshotWriter --> SimulationConfig
+SnapshotWriter --> Particle
+
+SimulationResult --> Particle
+@enduml
+
